@@ -12,6 +12,7 @@ import tempfile
 
 from .font_manager import get_font_manager, FontConfig
 from .excel_reader import SubtitleEntry
+from ..utils.ffmpeg_utils import get_ffmpeg_path, get_ffprobe_path
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +133,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     def get_video_info(self, video_path: str) -> Dict:
         """Lấy thông tin video bằng ffprobe"""
         cmd = [
-            "ffprobe",
+            get_ffprobe_path(),
             "-v", "quiet",
             "-print_format", "json",
             "-show_format",
@@ -185,7 +186,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         output_path: Optional[str] = None,
         language: str = "vi",
         video_format: Optional[str] = None,
-        use_ass: bool = True
+        use_ass: bool = True,
+        font_size: Optional[int] = None
     ) -> str:
         """
         Render phụ đề lên video
@@ -197,6 +199,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             language: Mã ngôn ngữ để chọn font
             video_format: Định dạng video (16x9, 9x16, 1x1, 4x5)
             use_ass: Sử dụng ASS format để có styling tốt hơn
+            font_size: Kích thước font tuỳ chỉnh (optional)
             
         Returns:
             Đường dẫn video output
@@ -206,8 +209,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         # Detect video format nếu không được chỉ định
         vf = VIDEO_FORMATS.get(video_format) if video_format else self.detect_video_format(str(video_path))
         
-        # Lấy font config
+        # Lấy font config và override font_size nếu có
         font_config = self.font_manager.get_font_config(language)
+        if font_size:
+            font_config.font_size = font_size
         
         # Output path
         if output_path is None:
@@ -228,21 +233,47 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         
         try:
             # Build FFmpeg command
+            filters = []
+            
+            # 1. Resize/Crop filter if needed
+            info = self.get_video_info(str(video_path))
+            input_width = 1920
+            input_height = 1080
+            for stream in info.get("streams", []):
+                if stream.get("codec_type") == "video":
+                    input_width = stream.get("width", 1920)
+                    input_height = stream.get("height", 1080)
+                    break
+            
+            if input_width != vf.width or input_height != vf.height:
+                logger.info(f"Resizing video from {input_width}x{input_height} to {vf.width}x{vf.height}")
+                # Strategy: Crop to fill
+                # Scale so the smallest dimension matches the target, then crop
+                filters.append(f"scale={vf.width}:{vf.height}:force_original_aspect_ratio=increase")
+                filters.append(f"crop={vf.width}:{vf.height}")
+                # Note: 'setsar=1' might be needed if aspect ratio pixel is non-square, but usually fine.
+            
+            # 2. Subtitle filter
             if use_ass:
                 # ASS có styling, dùng filter ass
-                subtitle_filter = f"ass='{subtitle_file}'"
+                # Escape path cho filter ass (Windows path issue)
+                safe_path = subtitle_file.replace("\\", "/").replace(":", "\\:")
+                filters.append(f"ass='{safe_path}'")
             else:
                 # SRT dùng subtitles filter với force_style
                 font_opts = self.font_manager.get_ffmpeg_font_options(language, vf.name)
                 style = f"FontName={font_opts['fontname']},FontSize={font_opts['fontsize']}"
                 style += f",PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000"
                 style += f",BorderStyle=1,Outline={font_opts['borderw']}"
-                subtitle_filter = f"subtitles='{subtitle_file}':force_style='{style}'"
+                safe_path = subtitle_file.replace("\\", "/").replace(":", "\\:")
+                filters.append(f"subtitles='{safe_path}':force_style='{style}'")
+            
+            final_filter = ",".join(filters)
             
             cmd = [
-                "ffmpeg", "-y",
+                get_ffmpeg_path(), "-y",
                 "-i", str(video_path),
-                "-vf", subtitle_filter,
+                "-vf", final_filter,
                 "-c:a", "copy",
                 str(output_path)
             ]

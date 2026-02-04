@@ -9,6 +9,7 @@ from typing import List, Optional, Dict, Tuple
 from dataclasses import dataclass
 import subprocess
 import json
+from ..utils.ffmpeg_utils import get_ffmpeg_path, get_ffprobe_path
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ class SceneAnalyzer:
     def _get_video_duration(self, video_path: str) -> float:
         """Lấy thời lượng video"""
         cmd = [
-            "ffprobe", "-v", "quiet",
+            get_ffprobe_path(), "-v", "quiet",
             "-show_entries", "format=duration",
             "-of", "default=noprint_wrappers=1:nokey=1",
             video_path
@@ -67,7 +68,7 @@ class SceneAnalyzer:
     def _extract_keyframe(self, video_path: str, timestamp: float, output_path: str) -> str:
         """Trích xuất một keyframe tại timestamp"""
         cmd = [
-            "ffmpeg", "-y",
+            get_ffmpeg_path(), "-y",
             "-ss", str(timestamp),
             "-i", video_path,
             "-vframes", "1",
@@ -89,7 +90,7 @@ class SceneAnalyzer:
             Danh sách timestamps của các điểm chuyển cảnh
         """
         cmd = [
-            "ffprobe", "-v", "quiet",
+            get_ffprobe_path(), "-v", "quiet",
             "-show_entries", "frame=pts_time",
             "-of", "csv=p=0",
             "-f", "lavfi",

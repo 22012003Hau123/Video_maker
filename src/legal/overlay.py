@@ -11,6 +11,7 @@ import tempfile
 
 from .database import LegalContent, MediaType, UsageType, get_legal_database
 from .scene_detector import SceneDetector
+from ..utils.ffmpeg_utils import get_ffmpeg_path, get_ffprobe_path
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ class LegalOverlay:
     def _get_video_duration(self, video_path: str) -> float:
         """Lấy thời lượng video"""
         cmd = [
-            "ffprobe",
+            get_ffprobe_path(),
             "-v", "quiet",
             "-show_entries", "format=duration",
             "-of", "default=noprint_wrappers=1:nokey=1",
@@ -42,7 +43,7 @@ class LegalOverlay:
     def _get_video_dimensions(self, video_path: str) -> tuple:
         """Lấy kích thước video"""
         cmd = [
-            "ffprobe",
+            get_ffprobe_path(),
             "-v", "quiet",
             "-select_streams", "v:0",
             "-show_entries", "stream=width,height",
@@ -168,7 +169,7 @@ class LegalOverlay:
         filter_complex = ",".join(filters)
         
         cmd = [
-            "ffmpeg", "-y",
+            get_ffmpeg_path(), "-y",
             "-i", str(video_path),
             "-vf", filter_complex,
             "-c:a", "copy",
@@ -246,7 +247,7 @@ class LegalOverlay:
         
         # Cần scale image trước
         cmd = [
-            "ffmpeg", "-y",
+            get_ffmpeg_path(), "-y",
             "-i", str(video_path),
             "-i", legal_image_path,
             "-filter_complex",

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 from dataclasses import dataclass
 import json
+from ..utils.ffmpeg_utils import get_ffmpeg_path
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ class TimingSync:
         self.model_size = model_size
         self.model = None
         self._openai_client = None
+        self.last_detected_language = None
         
     def _get_openai_client(self):
         """Lấy OpenAI client"""
@@ -57,33 +59,40 @@ class TimingSync:
             self.model = whisper.load_model(self.model_size)
         return self.model
     
-    def transcribe(self, audio_path: str, language: str = "vi") -> List[TranscriptSegment]:
+    def transcribe(self, audio_path: str, language: Optional[str] = None) -> List[TranscriptSegment]:
         """
         Transcribe audio và lấy timing
         
         Args:
             audio_path: Đường dẫn file audio/video
-            language: Mã ngôn ngữ (vi, en, ja, etc.)
+            language: Mã ngôn ngữ (vi, en, ja, etc.). None = Auto Detect
             
         Returns:
             Danh sách TranscriptSegment với timing
         """
+        self.last_detected_language = None
+        
         if self.use_local:
             return self._transcribe_local(audio_path, language)
         else:
             return self._transcribe_api(audio_path, language)
     
-    def _transcribe_local(self, audio_path: str, language: str) -> List[TranscriptSegment]:
+    def _transcribe_local(self, audio_path: str, language: Optional[str]) -> List[TranscriptSegment]:
         """Transcribe sử dụng Whisper local"""
         model = self._load_local_model()
         if model is None:
             raise RuntimeError("Whisper model not available")
         
+        # Whisper local handles language=None by auto-detecting
         result = model.transcribe(
             audio_path,
             language=language,
             word_timestamps=True
         )
+        
+        # Capture detected language
+        self.last_detected_language = result.get("language")
+        logger.info(f"Local Whisper detected language: {self.last_detected_language}")
         
         segments = []
         for seg in result.get("segments", []):
@@ -96,25 +105,45 @@ class TimingSync:
         
         return segments
     
-    def _transcribe_api(self, audio_path: str, language: str) -> List[TranscriptSegment]:
+    def _transcribe_api(self, audio_path: str, language: Optional[str]) -> List[TranscriptSegment]:
         """Transcribe sử dụng OpenAI Whisper API"""
         client = self._get_openai_client()
         
         with open(audio_path, "rb") as audio_file:
-            response = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio_file,
-                language=language,
-                response_format="verbose_json",
-                timestamp_granularities=["segment"]
-            )
+            # Prepare args avoiding None for language if strictly required, 
+            # but API allows omitting it for auto-detect.
+            kwargs = {
+                "model": "whisper-1",
+                "file": audio_file,
+                "response_format": "verbose_json",
+                "timestamp_granularities": ["segment"]
+            }
+            if language:
+                kwargs["language"] = language
+                
+            response = client.audio.transcriptions.create(**kwargs)
+        
+        # Capture detected language
+        # response is an object with 'language' attribute
+        self.last_detected_language = getattr(response, "language", None)
+        logger.info(f"API Whisper detected language: {self.last_detected_language}")
         
         segments = []
         for seg in response.segments:
+            # Handle both object and dict access
+            if isinstance(seg, dict):
+                start = seg.get('start', 0.0)
+                end = seg.get('end', 0.0)
+                text = seg.get('text', '').strip()
+            else:
+                start = getattr(seg, 'start', 0.0)
+                end = getattr(seg, 'end', 0.0)
+                text = getattr(seg, 'text', '').strip()
+                
             segments.append(TranscriptSegment(
-                start=seg.start,
-                end=seg.end,
-                text=seg.text.strip()
+                start=start,
+                end=end,
+                text=text
             ))
         
         return segments
@@ -566,10 +595,12 @@ def extract_audio(video_path: str, output_path: Optional[str] = None) -> str:
     
     if output_path is None:
         video_name = Path(video_path).stem
-        output_path = f"/tmp/{video_name}_audio.wav"
+        import tempfile
+        output_dir = tempfile.gettempdir()
+        output_path = os.path.join(output_dir, f"{video_name}_audio.wav")
     
     cmd = [
-        "ffmpeg", "-y",
+        get_ffmpeg_path(), "-y",
         "-i", video_path,
         "-vn",  # No video
         "-acodec", "pcm_s16le",

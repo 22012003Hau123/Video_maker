@@ -31,94 +31,48 @@ class FontConfig:
 class FontManager:
     """Quản lý font theo ngôn ngữ"""
     
-    # Mapping font mặc định theo ngôn ngữ
-    DEFAULT_FONTS: Dict[str, FontConfig] = {
-        # Tiếng Việt
-        'vi': FontConfig(
-            language='vi',
-            font_family='Arial',
-            font_size=48,
-            font_color='white',
-            outline_color='black'
-        ),
-        # English
-        'en': FontConfig(
-            language='en',
-            font_family='Arial',
-            font_size=48,
-            font_color='white',
-            outline_color='black'
-        ),
-        # 日本語 (Japanese)
-        'ja': FontConfig(
-            language='ja',
-            font_family='Noto Sans JP',
-            font_size=44,
-            font_color='white',
-            outline_color='black'
-        ),
-        # 한국어 (Korean)
-        'ko': FontConfig(
-            language='ko',
-            font_family='Noto Sans KR',
-            font_size=44,
-            font_color='white',
-            outline_color='black'
-        ),
-        # 中文 (Chinese)
-        'zh': FontConfig(
-            language='zh',
-            font_family='Noto Sans SC',
-            font_size=44,
-            font_color='white',
-            outline_color='black'
-        ),
-        # Français (French)
-        'fr': FontConfig(
-            language='fr',
-            font_family='Arial',
-            font_size=48,
-            font_color='white',
-            outline_color='black'
-        ),
-        # Español (Spanish)
-        'es': FontConfig(
-            language='es',
-            font_family='Arial',
-            font_size=48,
-            font_color='white',
-            outline_color='black'
-        ),
-        # Deutsch (German)
-        'de': FontConfig(
-            language='de',
-            font_family='Arial',
-            font_size=48,
-            font_color='white',
-            outline_color='black'
-        ),
-        # العربية (Arabic)
-        'ar': FontConfig(
-            language='ar',
-            font_family='Noto Sans Arabic',
-            font_size=44,
-            font_color='white',
-            outline_color='black'
-        ),
-        # ภาษาไทย (Thai)
-        'th': FontConfig(
-            language='th',
-            font_family='Noto Sans Thai',
-            font_size=44,
-            font_color='white',
-            outline_color='black'
-        ),
-    }
-    
     def __init__(self, fonts_dir: Optional[str] = None):
         self.fonts_dir = Path(fonts_dir) if fonts_dir else FONTS_DIR
         self.custom_fonts: Dict[str, FontConfig] = {}
+        
+        # Determine OS
+        import platform
+        self.is_windows = platform.system() == "Windows"
+        
+        self._init_default_fonts()
         self._scan_fonts()
+    
+    def _init_default_fonts(self):
+        """Khởi tạo font mặc định theo OS"""
+        # Base Latin fonts (Arial is safe for both if ttf-mscorefonts installed on Linux)
+        base_font = 'Arial'
+        
+        self.default_config_map = {
+            'vi': FontConfig('vi', base_font, font_size=48),
+            'en': FontConfig('en', base_font, font_size=48),
+            'fr': FontConfig('fr', base_font, font_size=48),
+            'es': FontConfig('es', base_font, font_size=48),
+            'de': FontConfig('de', base_font, font_size=48),
+        }
+        
+        if self.is_windows:
+            # Windows Specific Fonts
+            self.default_config_map.update({
+                'ja': FontConfig('ja', 'Meiryo', font_size=44),
+                'ko': FontConfig('ko', 'Malgun Gothic', font_size=44),
+                'zh': FontConfig('zh', 'Microsoft YaHei', font_size=44),
+                'ar': FontConfig('ar', 'Segoe UI', font_size=44),
+                'th': FontConfig('th', 'Leelawadee UI', font_size=44),
+            })
+        else:
+            # Linux/Mac Standard (Google Noto Fonts)
+            self.default_config_map.update({
+                'ja': FontConfig('ja', 'Noto Sans JP', font_size=44),
+                'ko': FontConfig('ko', 'Noto Sans KR', font_size=44),
+                'zh': FontConfig('zh', 'Noto Sans SC', font_size=44),
+                'ar': FontConfig('ar', 'Noto Sans Arabic', font_size=44),
+                'th': FontConfig('th', 'Noto Sans Thai', font_size=44),
+            })
     
     def _scan_fonts(self):
         """Scan thư mục fonts để tìm font files"""
@@ -140,12 +94,12 @@ class FontManager:
             return self.custom_fonts[lang]
         
         # Fallback to defaults
-        if lang in self.DEFAULT_FONTS:
-            return self.DEFAULT_FONTS[lang]
+        if lang in self.default_config_map:
+            return self.default_config_map[lang]
         
         # Default fallback
         logger.warning(f"No font config for language '{language}', using English default")
-        return self.DEFAULT_FONTS['en']
+        return self.default_config_map['en']
     
     def set_custom_font(self, language: str, config: FontConfig):
         """Đặt font custom cho ngôn ngữ"""
@@ -179,7 +133,7 @@ class FontManager:
     
     def get_available_languages(self) -> List[str]:
         """Lấy danh sách ngôn ngữ được hỗ trợ"""
-        all_langs = set(self.DEFAULT_FONTS.keys())
+        all_langs = set(self.default_config_map.keys())
         all_langs.update(self.custom_fonts.keys())
         return sorted(list(all_langs))
     
@@ -187,12 +141,13 @@ class FontManager:
         """Lấy danh sách font có sẵn trên hệ thống"""
         fonts = []
         
-        # Linux font directories
+        # Font directories
         font_dirs = [
-            "/usr/share/fonts",
-            "/usr/local/share/fonts",
+            "C:/Windows/Fonts",
             os.path.expanduser("~/.fonts"),
             os.path.expanduser("~/.local/share/fonts"),
+            "/usr/share/fonts",
+            "/usr/local/share/fonts",
         ]
         
         for font_dir in font_dirs:

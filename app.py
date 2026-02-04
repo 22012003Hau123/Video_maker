@@ -440,6 +440,147 @@ async def add_subtitle_from_text(
         return {"job_id": job_id, "message": f"Processing {len(subtitle_lines)} dòng phụ đề - AI đang canh timing"}
 
 
+async def process_auto_subtitles(
+    job_id: str,
+    video_path: str,
+    language: str,
+    video_format: str,
+    font_size: Optional[int] = None
+):
+    """Background task để tự động trích xuất phụ đề từ audio (Auto Detect)"""
+    try:
+        update_job(job_id, status="processing", progress=5)
+        
+        from src.subtitle.renderer import SubtitleRenderer
+        from src.subtitle.timing_sync import TimingSync, extract_audio
+        
+        sync = TimingSync()
+        
+        try:
+            # Trích xuất audio từ video
+            audio_path = extract_audio(video_path)
+            update_job(job_id, progress=30)
+            
+            # Dùng Whisper transcribe để lấy nội dung và timing (Auto Detect Language)
+            logger.info("Transcribing audio with auto-detect...")
+            transcript = sync.transcribe(audio_path, language=None)
+            
+            if not transcript:
+                raise ValueError("Không thể trích xuất lời thoại từ video")
+                
+            detected_lang = sync.last_detected_language
+            logger.info(f"Detected audio language: {detected_lang}")
+            
+            update_job(job_id, progress=50)
+            
+            # Logic: Translate if detected language != target language
+            # Normalize: Whisper usually returns 2-char code 'en', 'vi'. 
+            # If detected 'en' and target 'vi', translate.
+            
+            # Initial aligned data (raw text)
+            aligned_raw = [(seg.start, seg.end, seg.text) for seg in transcript]
+            
+            if detected_lang and language and detected_lang.lower() != language.lower():
+                logger.info(f"Translating subtitles from {detected_lang} to {language}...")
+                
+                try:
+                    from src.subtitle.translator import SubtitleTranslator
+                    translator = SubtitleTranslator()
+                    
+                    aligned_raw = translator.translate_with_timing(
+                        aligned_raw,
+                        source_lang=detected_lang,
+                        target_lang=language,
+                        context="Video subtitles"
+                    )
+                except Exception as e:
+                    logger.error(f"Translation failed: {e}")
+                    # Continue with original text if translation fails
+            
+            update_job(job_id, progress=60)
+            
+            # Apply smart line break final text
+            aligned = [
+                (start, end, sync.smart_line_break(text))
+                for start, end, text in aligned_raw
+            ]
+            
+            logger.info(f"Generated {len(aligned)} subtitle segments")
+            
+        except Exception as e:
+            logger.error(f"Auto detect failed: {e}")
+            raise e
+        
+        update_job(job_id, progress=70)
+        
+        # Render
+        renderer = SubtitleRenderer(str(OUTPUT_DIR))
+        output_path = renderer.render(
+            video_path,
+            aligned,
+            language=language,
+            video_format=video_format,
+            font_size=font_size
+        )
+        
+        update_job(
+            job_id,
+            status="completed",
+            progress=100,
+            result_path=output_path,
+            completed_at=datetime.now().isoformat()
+        )
+        
+    except Exception as e:
+        logger.error(f"Job {job_id} failed: {e}")
+        update_job(job_id, status="failed", error=str(e))
+
+
+@app.post("/api/subtitle-auto")
+async def add_subtitle_auto(
+    background_tasks: BackgroundTasks,
+    video: UploadFile = File(...),
+    language: str = Form("vi"),
+    video_format: str = Form("16x9"),
+    font_size: Optional[int] = Form(None)
+):
+    """
+    Tự động trích xuất và thêm phụ đề (Auto Detect)
+    
+    - **video**: File video
+    - **language**: Mã ngôn ngữ của video
+    - **video_format**: Định dạng video
+    - **font_size**: Kích thước font (optional)
+    
+    AI sẽ:
+    - Nghe và trích xuất lời thoại (Speech-to-Text)
+    - Tự động lấy timing chính xác
+    - Render phụ đề lên video
+    """
+    # Save video
+    video_path = save_upload(video, "video_")
+    
+    # Create job
+    job_id = uuid.uuid4().hex
+    jobs[job_id] = JobStatus(
+        job_id=job_id,
+        status="pending",
+        created_at=datetime.now().isoformat()
+    )
+    
+    # Start background processing
+    background_tasks.add_task(
+        process_auto_subtitles,
+        job_id,
+        str(video_path),
+        language,
+        video_format,
+        font_size
+    )
+    
+    return {"job_id": job_id, "message": "AI đang nghe và trích xuất phụ đề..."}
+
+
 @app.post("/api/legal")
 async def add_legal_content(
     background_tasks: BackgroundTasks,
