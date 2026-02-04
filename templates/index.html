@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Subtitles Automation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #ec4899;
+            --background: #0f172a;
+            --surface: #1e293b;
+            --surface-light: #334155;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+        }
+        
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--background);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        
+        .navbar {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .tab {
+            padding: 1rem 2rem;
+            background: var(--surface);
+            border: none;
+            border-radius: 12px;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 1rem;
+        }
+        
+        .tab:hover {
+            background: var(--surface-light);
+        }
+        
+        .tab.active {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+        }
+        
+        .panel {
+            display: none;
+            background: var(--surface);
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        
+        .panel.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .panel h2 {
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        
+        .form-group input[type="file"] {
+            display: none;
+        }
+        
+        .file-upload {
+            border: 2px dashed var(--surface-light);
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .file-upload:hover {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.1);
+        }
+        
+        .file-upload.has-file {
+            border-color: var(--success);
+            background: rgba(16, 185, 129, 0.1);
+        }
+        
+        .file-upload .icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        
+        select, input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--surface-light);
+            border: 1px solid transparent;
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 1rem;
+            transition: all 0.3s;
+        }
+        
+        select:focus, input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            accent-color: var(--primary);
+        }
+        
+        .btn {
+            padding: 1rem 2rem;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(99, 102, 241, 0.3);
+        }
+        
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+        }
+        
+        @media (max-width: 768px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .status-box {
+            background: var(--surface-light);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-top: 1.5rem;
+        }
+        
+        .status-box h3 {
+            margin-bottom: 1rem;
+        }
+        
+        .progress-bar {
+            height: 8px;
+            background: var(--background);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 0.5rem;
+        }
+        
+        .progress-bar .fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+        
+        .status-text {
+            display: flex;
+            justify-content: space-between;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        
+        .status-completed {
+            color: var(--success);
+        }
+        
+        .status-failed {
+            color: var(--error);
+        }
+        
+        .download-btn {
+            margin-top: 1rem;
+            background: var(--success);
+            color: white;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+        
+        .input-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .input-tab {
+            padding: 0.75rem 1.5rem;
+            background: var(--surface-light);
+            border: 2px solid transparent;
+            border-radius: 8px;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.9rem;
+        }
+        
+        .input-tab:hover {
+            background: var(--background);
+        }
+        
+        .input-tab.active {
+            border-color: var(--primary);
+            color: var(--text);
+            background: rgba(99, 102, 241, 0.2);
+        }
+        
+        .input-content {
+            display: none;
+        }
+        
+        .input-content.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        textarea {
+            width: 100%;
+            min-height: 200px;
+            padding: 1rem;
+            background: var(--surface-light);
+            border: 2px solid transparent;
+            border-radius: 12px;
+            color: var(--text);
+            font-size: 1rem;
+            font-family: inherit;
+            resize: vertical;
+            transition: all 0.3s;
+        }
+        
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        
+        textarea::placeholder {
+            color: var(--text-muted);
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">
+            🎬 Video Subtitles Automation
+        </div>
+        <div>
+            <a href="/docs" style="color: white; text-decoration: none;">📚 API Docs</a>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('subtitle')">📝 Phụ Đề</button>
+            <button class="tab" onclick="switchTab('export')">📄 Export SRT</button>
+            <button class="tab" onclick="switchTab('batch')">🌍 Đa Ngôn Ngữ</button>
+            <button class="tab" onclick="switchTab('legal')">⚖️ Pháp Lý</button>
+            <button class="tab" onclick="switchTab('master')">🎬 Master</button>
+        </div>
+        
+        <!-- Subtitle Panel -->
+        <div id="panel-subtitle" class="panel active">
+            <h2>📝 Thêm & Dịch Phụ Đề</h2>
+            <form id="subtitle-form" onsubmit="submitSubtitle(event)">
+                <div class="form-group">
+                    <label>Video</label>
+                    <label class="file-upload" id="video-upload-1">
+                        <input type="file" name="video" accept="video/*" onchange="handleFileSelect(this, 'video-upload-1')">
+                        <div class="icon">📹</div>
+                        <div>Kéo thả hoặc click để chọn video</div>
+                    </label>
+                </div>
+                
+                <div class="form-group">
+                    <label>Phụ đề - Chọn cách nhập:</label>
+                    <div class="input-tabs">
+                        <button type="button" class="input-tab active" onclick="switchInputMode('excel')">📊 Upload Excel</button>
+                        <button type="button" class="input-tab" onclick="switchInputMode('text')">✏️ Nhập trực tiếp</button>
+                    </div>
+                    
+                    <div id="excel-input" class="input-content active">
+                        <label class="file-upload" id="excel-upload">
+                            <input type="file" name="excel" accept=".xlsx,.xls,.csv" onchange="handleFileSelect(this, 'excel-upload')">
+                            <div class="icon">📊</div>
+                            <div>Kéo thả hoặc click để chọn Excel</div>
+                        </label>
+                    </div>
+                    
+                    <div id="text-input" class="input-content">
+                        <textarea name="subtitle_text" id="subtitle-textarea" placeholder="Cách 1: Nhập 1 đoạn văn dài (AI sẽ tự ngắt câu):
+Xin chào mọi người, hôm nay tôi sẽ giới thiệu về sản phẩm mới của chúng tôi. Đây là sản phẩm được nghiên cứu và phát triển trong suốt 2 năm qua...
+
+Cách 2: Nhập mỗi dòng là 1 câu phụ đề:
+Xin chào mọi người
+Hôm nay tôi sẽ giới thiệu
+Sản phẩm mới của chúng tôi"></textarea>
+                        <small style="color: var(--text-muted);">
+                            ✨ <strong>AI tự động xử lý:</strong> Ngắt đoạn dài thành câu phụ đề phù hợp + Căn timing theo lời thoại
+                        </small>
+                    </div>
+                </div>
+                
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label>Ngôn ngữ</label>
+                        <select name="language">
+                            <option value="vi">🇻🇳 Tiếng Việt</option>
+                            <option value="en">🇺🇸 English</option>
+                            <option value="fr">🇫🇷 Français</option>
+                            <option value="ja">🇯🇵 日本語</option>
+                            <option value="ko">🇰🇷 한국어</option>
+                            <option value="zh">🇨🇳 中文</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Định dạng Video</label>
+                        <select name="video_format">
+                            <option value="16x9">16:9 (Landscape)</option>
+                            <option value="9x16">9:16 (Portrait/Story)</option>
+                            <option value="1x1">1:1 (Square)</option>
+                            <option value="4x5">4:5 (Instagram)</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <div style="background: rgba(99, 102, 241, 0.2); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--primary);">
+                        ✨ <strong>AI tự động canh timing</strong> - Whisper AI sẽ phân tích lời thoại trong video và căn thời gian phụ đề tự động
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary" id="subtitle-submit">
+                    ✨ Tạo Phụ Đề
+                </button>
+                
+                <div id="subtitle-status" class="status-box" style="display: none;">
+                    <h3>Trạng thái xử lý</h3>
+                    <div class="progress-bar">
+                        <div class="fill" style="width: 0%"></div>
+                    </div>
+                    <div class="status-text">
+                        <span class="status-label">Đang chờ...</span>
+                        <span class="status-percent">0%</span>
+                    </div>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Export SRT/ASS Panel -->
+        <div id="panel-export" class="panel">
+            <h2>📄 Xuất File Phụ Đề (SRT/ASS)</h2>
+            <p style="color: var(--text-muted); margin-bottom: 1.5rem;">
+                Xuất file phụ đề để chỉnh sửa trong Premiere Pro, After Effects, DaVinci Resolve...
+            </p>
+            <form id="export-form" onsubmit="submitExport(event)">
+                <div class="form-group">
+                    <label>Video (để lấy timing)</label>
+                    <label class="file-upload" id="video-upload-export">
+                        <input type="file" name="video" accept="video/*" onchange="handleFileSelect(this, 'video-upload-export')">
+                        <div class="icon">📹</div>
+                        <div>Kéo thả hoặc click để chọn video</div>
+                    </label>
+                </div>
+                
+                <div class="form-group">
+                    <label>Phụ đề</label>
+                    <textarea name="subtitle_text" placeholder="Nhập phụ đề...
+
+What makes a moment unforgettable?
+Craft. Time. And a story worth savoring."></textarea>
+                </div>
+                
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label>Ngôn ngữ phụ đề</label>
+                        <select name="language">
+                            <option value="en">🇺🇸 English</option>
+                            <option value="vi">🇻🇳 Tiếng Việt</option>
+                            <option value="ja">🇯🇵 日本語</option>
+                            <option value="ko">🇰🇷 한국어</option>
+                            <option value="zh">🇨🇳 中文</option>
+                            <option value="fr">🇫🇷 Français</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Định dạng xuất</label>
+                        <select name="export_format">
+                            <option value="both">SRT + ASS (cả hai)</option>
+                            <option value="srt">SRT only</option>
+                            <option value="ass">ASS only</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Dịch thêm sang (optional)</label>
+                    <input type="text" name="translate_to" placeholder="vi,ja,ko (phân cách bằng dấu phẩy)" style="width: 100%; padding: 0.8rem; border-radius: 8px; border: 2px solid var(--surface-light); background: var(--surface-light); color: var(--text);">
+                    <small style="color: var(--text-muted);">Ví dụ: vi,ja,ko - sẽ xuất file cho mỗi ngôn ngữ</small>
+                </div>
+                
+                <button type="submit" class="btn btn-primary" id="export-submit">
+                    📥 Xuất File Phụ Đề
+                </button>
+                
+                <div id="export-status" class="status-box" style="display: none;">
+                    <h3>Trạng thái xử lý</h3>
+                    <div class="progress-bar">
+                        <div class="fill" style="width: 0%"></div>
+                    </div>
+                    <div class="status-text">
+                        <span class="status-label">Đang chờ...</span>
+                        <span class="status-percent">0%</span>
+                    </div>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Batch Export Panel -->
+        <div id="panel-batch" class="panel">
+            <h2>🌍 Xuất Phụ Đề Đa Ngôn Ngữ</h2>
+            <p style="color: var(--text-muted); margin-bottom: 1.5rem;">
+                Nhập phụ đề một ngôn ngữ, tự động dịch và xuất nhiều phiên bản video
+            </p>
+            <form id="batch-form" onsubmit="submitBatch(event)">
+                <div class="form-group">
+                    <label>Video</label>
+                    <label class="file-upload" id="video-upload-batch">
+                        <input type="file" name="video" accept="video/*" onchange="handleFileSelect(this, 'video-upload-batch')">
+                        <div class="icon">📹</div>
+                        <div>Kéo thả hoặc click để chọn video</div>
+                    </label>
+                </div>
+                
+                <div class="form-group">
+                    <label>Phụ đề gốc</label>
+                    <textarea name="subtitle_text" placeholder="Nhập phụ đề tiếng Anh (hoặc ngôn ngữ gốc)...
+
+Ví dụ:
+What makes a moment unforgettable?
+Craft. Time. And a story worth savoring."></textarea>
+                </div>
+                
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label>Ngôn ngữ gốc</label>
+                        <select name="source_language">
+                            <option value="fr">🇫🇷 Français (Pháp)</option>
+                            <option value="en">🇺🇸 English (Mỹ)</option>
+                            <option value="vi">🇻🇳 Tiếng Việt</option>
+                            <option value="zh">🇭🇰 中文 (Hồng Kông)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Định dạng video</label>
+                        <select name="video_format">
+                            <option value="16x9">16:9 (YouTube, TV)</option>
+                            <option value="9x16">9:16 (TikTok, Reels)</option>
+                            <option value="1x1">1:1 (Instagram Feed)</option>
+                            <option value="4x5">4:5 (Instagram Portrait)</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Ngôn ngữ cần dịch (chọn nhiều)</label>
+                    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                        <label style="display: flex; align-items: center; gap: 0.3rem; cursor: pointer;">
+                            <input type="checkbox" name="lang_fr" value="fr" checked> 🇫🇷 Français (Pháp)
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 0.3rem; cursor: pointer;">
+                            <input type="checkbox" name="lang_en" value="en"> 🇺🇸 English (Mỹ)
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 0.3rem; cursor: pointer;">
+                            <input type="checkbox" name="lang_vi" value="vi"> 🇻🇳 Tiếng Việt
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 0.3rem; cursor: pointer;">
+                            <input type="checkbox" name="lang_zh" value="zh"> 🇭🇰 中文 (Hồng Kông)
+                        </label>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary" id="batch-submit">
+                    🚀 Xuất Đa Ngôn Ngữ
+                </button>
+                
+                <div id="batch-status" class="status-box" style="display: none;">
+                    <h3>Trạng thái xử lý</h3>
+                    <div class="progress-bar">
+                        <div class="fill" style="width: 0%"></div>
+                    </div>
+                    <div class="status-text">
+                        <span class="status-label">Đang chờ...</span>
+                        <span class="status-percent">0%</span>
+                    </div>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Legal Panel -->
+        <div id="panel-legal" class="panel">
+            <h2>⚖️ Thêm Nội Dung Pháp Lý</h2>
+            <form id="legal-form" onsubmit="submitLegal(event)">
+                <div class="form-group">
+                    <label>Video</label>
+                    <label class="file-upload" id="video-upload-2">
+                        <input type="file" name="video" accept="video/*" onchange="handleFileSelect(this, 'video-upload-2')">
+                        <div class="icon">📹</div>
+                        <div>Kéo thả hoặc click để chọn video</div>
+                    </label>
+                </div>
+                
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label>Quốc gia</label>
+                        <select name="country_code">
+                            <option value="FR">🇫🇷 France (Pháp)</option>
+                            <option value="US">🇺🇸 United States (Mỹ)</option>
+                            <option value="VN">🇻🇳 Việt Nam</option>
+                            <option value="HK">🇭🇰 Hong Kong (Hồng Kông)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Loại Media</label>
+                        <select name="media_type">
+                            <option value="social">Social Media</option>
+                            <option value="tv">TV</option>
+                            <option value="ooh">OOH (Billboard)</option>
+                            <option value="digital">Digital Banner</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" name="auto_position" id="auto-position" checked>
+                        <label for="auto-position">Tự động phát hiện vị trí tối ưu (AI)</label>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary" id="legal-submit">
+                    ⚖️ Thêm Nội Dung Pháp Lý
+                </button>
+                
+                <div id="legal-status" class="status-box" style="display: none;"></div>
+            </form>
+        </div>
+        
+        <!-- Master Panel -->
+        <div id="panel-master" class="panel">
+            <h2>🎬 Master Hoá Video</h2>
+            <form id="master-form" onsubmit="submitMaster(event)">
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label>Video</label>
+                        <label class="file-upload" id="video-upload-3">
+                            <input type="file" name="video" accept="video/*" onchange="handleFileSelect(this, 'video-upload-3')">
+                            <div class="icon">📹</div>
+                            <div>Kéo thả video gốc</div>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>Logo mới (tuỳ chọn)</label>
+                        <label class="file-upload" id="logo-upload">
+                            <input type="file" name="logo" accept="image/*" onchange="handleFileSelect(this, 'logo-upload')">
+                            <div class="icon">🏷️</div>
+                            <div>Logo PNG/JPG</div>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Packshot/Sản phẩm (tuỳ chọn)</label>
+                    <label class="file-upload" id="packshot-upload">
+                        <input type="file" name="packshot" accept="image/*" onchange="handleFileSelect(this, 'packshot-upload')">
+                        <div class="icon">🍾</div>
+                        <div>Ảnh packshot sản phẩm</div>
+                    </label>
+                </div>
+                
+                <button type="submit" class="btn btn-primary" id="master-submit">
+                    🎬 Xử Lý Video
+                </button>
+                
+                <div id="master-status" class="status-box" style="display: none;"></div>
+            </form>
+        </div>
+    </div>
+    
+    <footer class="footer">
+        Video Subtitles Automation © 2025 | Powered by AI
+    </footer>
+    
+    <script>
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById('panel-' + tabName).classList.add('active');
+        }
+        
+        let currentInputMode = 'excel';
+        
+        function switchInputMode(mode) {
+            currentInputMode = mode;
+            
+            // Toggle tabs
+            document.querySelectorAll('.input-tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Toggle content
+            document.getElementById('excel-input').classList.remove('active');
+            document.getElementById('text-input').classList.remove('active');
+            document.getElementById(mode + '-input').classList.add('active');
+        }
+        
+        function handleFileSelect(input, uploadId) {
+            const upload = document.getElementById(uploadId);
+            if (input.files.length > 0) {
+                upload.classList.add('has-file');
+                upload.querySelector('div:last-child').textContent = input.files[0].name;
+            }
+        }
+        
+        async function submitSubtitle(e) {
+            e.preventDefault();
+            const form = e.target;
+            const formData = new FormData(form);
+            
+            // Xác định dùng Excel hay text trực tiếp
+            let endpoint = '/api/subtitle';
+            
+            if (currentInputMode === 'text') {
+                const subtitleText = document.getElementById('subtitle-textarea').value.trim();
+                if (!subtitleText) {
+                    alert('Vui lòng nhập phụ đề!');
+                    return;
+                }
+                formData.delete('excel');
+                formData.set('subtitle_text', subtitleText);
+                endpoint = '/api/subtitle-text';
+            } else {
+                const excelInput = form.querySelector('input[name="excel"]');
+                if (!excelInput.files.length) {
+                    alert('Vui lòng chọn file Excel!');
+                    return;
+                }
+            }
+            
+            document.getElementById('subtitle-submit').disabled = true;
+            document.getElementById('subtitle-status').style.display = 'block';
+            
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                
+                if (data.job_id) {
+                    pollJobStatus(data.job_id, 'subtitle-status');
+                }
+            } catch (error) {
+                alert('Lỗi: ' + error.message);
+            }
+        }
+        
+        async function submitBatch(e) {
+            e.preventDefault();
+            const form = e.target;
+            const formData = new FormData(form);
+            
+            // Collect selected languages
+            const selectedLangs = [];
+            document.querySelectorAll('#batch-form input[type="checkbox"]:checked').forEach(cb => {
+                selectedLangs.push(cb.value);
+            });
+            
+            if (selectedLangs.length === 0) {
+                alert('Vui lòng chọn ít nhất 1 ngôn ngữ để dịch!');
+                return;
+            }
+            
+            // Remove individual checkboxes and add combined string
+            document.querySelectorAll('#batch-form input[type="checkbox"]').forEach(cb => {
+                formData.delete(cb.name);
+            });
+            formData.append('target_languages', selectedLangs.join(','));
+            
+            document.getElementById('batch-submit').disabled = true;
+            document.getElementById('batch-status').style.display = 'block';
+            
+            try {
+                const response = await fetch('/api/subtitle-batch', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                
+                if (data.job_id) {
+                    pollJobStatus(data.job_id, 'batch-status');
+                }
+            } catch (error) {
+                alert('Lỗi: ' + error.message);
+                document.getElementById('batch-submit').disabled = false;
+            }
+        }
+        
+        async function submitExport(e) {
+            e.preventDefault();
+            const form = e.target;
+            const formData = new FormData(form);
+            
+            document.getElementById('export-submit').disabled = true;
+            document.getElementById('export-status').style.display = 'block';
+            
+            try {
+                const response = await fetch('/api/subtitle-export', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                
+                if (data.job_id) {
+                    pollJobStatus(data.job_id, 'export-status');
+                }
+            } catch (error) {
+                alert('Lỗi: ' + error.message);
+                document.getElementById('export-submit').disabled = false;
+            }
+        }
+        
+        async function submitLegal(e) {
+            e.preventDefault();
+            const form = e.target;
+            const formData = new FormData(form);
+            
+            document.getElementById('legal-submit').disabled = true;
+            document.getElementById('legal-status').style.display = 'block';
+            
+            try {
+                const response = await fetch('/api/legal', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                
+                if (data.job_id) {
+                    pollJobStatus(data.job_id, 'legal-status');
+                }
+            } catch (error) {
+                alert('Lỗi: ' + error.message);
+            }
+        }
+        
+        async function submitMaster(e) {
+            e.preventDefault();
+            const form = e.target;
+            const formData = new FormData(form);
+            
+            const hasLogo = form.querySelector('input[name="logo"]').files.length > 0;
+            const hasPackshot = form.querySelector('input[name="packshot"]').files.length > 0;
+            
+            document.getElementById('master-submit').disabled = true;
+            document.getElementById('master-status').style.display = 'block';
+            
+            try {
+                let endpoint = '/api/master/replace-logo';
+                if (hasPackshot && !hasLogo) {
+                    endpoint = '/api/master/add-packshot';
+                }
+                
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                
+                if (data.job_id) {
+                    pollJobStatus(data.job_id, 'master-status');
+                }
+            } catch (error) {
+                alert('Lỗi: ' + error.message);
+            }
+        }
+        
+        async function pollJobStatus(jobId, statusBoxId) {
+            const statusBox = document.getElementById(statusBoxId);
+            
+            const poll = async () => {
+                const response = await fetch('/api/jobs/' + jobId);
+                const job = await response.json();
+                
+                statusBox.innerHTML = `
+                    <h3>Trạng thái xử lý</h3>
+                    <div class="progress-bar">
+                        <div class="fill" style="width: ${job.progress}%"></div>
+                    </div>
+                    <div class="status-text">
+                        <span class="status-label ${job.status === 'completed' ? 'status-completed' : ''} ${job.status === 'failed' ? 'status-failed' : ''}">
+                            ${job.status === 'completed' ? '✅ Hoàn thành!' : job.status === 'failed' ? '❌ Lỗi: ' + job.error : '⏳ Đang xử lý...'}
+                        </span>
+                        <span class="status-percent">${job.progress}%</span>
+                    </div>
+                    ${job.status === 'completed' ? `
+                        <a href="/api/download/${jobId}" class="btn download-btn">
+                            ⬇️ Tải Video
+                        </a>
+                    ` : ''}
+                `;
+                
+                if (job.status !== 'completed' && job.status !== 'failed') {
+                    setTimeout(poll, 2000);
+                } else {
+                    // Re-enable submit buttons
+                    document.querySelectorAll('button[type="submit"]').forEach(b => b.disabled = false);
+                }
+            };
+            
+            poll();
+        }
+    </script>
+</body>
+</html>
