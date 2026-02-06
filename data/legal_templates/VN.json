@@ -1,0 +1,102 @@
+{
+  "country_code": "VN",
+  "country_name": "Việt Nam",
+  "language": "vi",
+  "default_font": "Arial",
+  "default_font_size": 14,
+  "rules": [
+    {
+      "type": "alcohol",
+      "category": "all",
+      "media_types": ["video", "print", "digital"],
+      "duration_rules": {
+        "under_30s": {
+          "text": "UỐNG RƯỢU BIA CÓ HẠI CHO SỨC KHỎE",
+          "position": "bottom_left",
+          "show_at_end": true,
+          "min_display_duration": 2.0
+        },
+        "30s_and_above": {
+          "text": "UỐNG RƯỢU BIA CÓ HẠI CHO SỨC KHỎE. KHÔNG UỐNG RƯỢU BIA KHI ĐIỀU KHIỂN PHƯƠNG TIỆN CƠ GIỚI",
+          "position": "bottom_left",
+          "show_at_start": true,
+          "show_at_end": true,
+          "min_display_duration": 3.0
+        }
+      },
+      "style": {
+        "font": "Arial",
+        "font_size": 14,
+        "font_color": "#FFFFFF",
+        "background_color": "#000000",
+        "background_opacity": 0.8
+      }
+    },
+    {
+      "type": "tobacco",
+      "category": "all",
+      "media_types": ["video", "print"],
+      "duration_rules": {
+        "all": {
+          "text": "HÚT THUỐC LÁ CÓ HẠI CHO SỨC KHỎE",
+          "position": "bottom_left",
+          "show_at_start": true,
+          "show_at_end": true
+        }
+      },
+      "style": {
+        "font": "Arial",
+        "font_size": 16,
+        "font_color": "#FFFFFF",
+        "background_color": "#000000"
+      }
+    },
+    {
+      "type": "food",
+      "category": "infant_formula",
+      "media_types": ["video", "print"],
+      "duration_rules": {
+        "all": {
+          "text": "SỮA MẸ LÀ THỨC ĂN TỐT NHẤT CHO SỨC KHỎE VÀ SỰ PHÁT TRIỂN TOÀN DIỆN CỦA TRẺ NHỎ",
+          "position": "bottom_left",
+          "show_at_end": true
+        }
+      },
+      "style": {
+        "font": "Arial",
+        "font_size": 12,
+        "font_color": "#000000",
+        "background_color": "#FFFFFF"
+      }
+    },
+    {
+      "type": "pharmaceutical",
+      "category": "otc",
+      "media_types": ["video"],
+      "duration_rules": {
+        "all": {
+          "text": "ĐỌC KỸ HƯỚNG DẪN SỬ DỤNG TRƯỚC KHI DÙNG",
+          "position": "bottom_left",
+          "show_at_end": true
+        }
+      },
+      "style": {
+        "font": "Arial",
+        "font_size": 12,
+        "font_color": "#FFFFFF"
+      }
+    }
+  ],
+  "age_gate": {
+    "required_for": ["alcohol"],
+    "minimum_age": 18,
+    "text": "CẤM BÁN CHO NGƯỜI DƯỚI 18 TUỔI"
+  },
+  "broadcast_restrictions": {
+    "alcohol": {
+      "banned_hours": ["06:00-22:00"],
+      "note": "Không quảng cáo rượu bia trên truyền hình từ 6h-22h"
+    }
+  },
+  "notes": "Theo Luật Quảng cáo 2012 và Nghị định 100/2019/NĐ-CP"
+}

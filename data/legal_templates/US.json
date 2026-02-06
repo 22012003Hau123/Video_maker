@@ -1,0 +1,110 @@
+{
+  "country_code": "US",
+  "country_name": "United States",
+  "language": "en",
+  "default_font": "Arial",
+  "default_font_size": 12,
+  "rules": [
+    {
+      "type": "alcohol",
+      "category": "spirits",
+      "media_types": ["video", "print", "digital"],
+      "duration_rules": {
+        "all": {
+          "text": "PLEASE DRINK RESPONSIBLY",
+          "position": "bottom_left",
+          "show_at_end": true,
+          "min_display_duration": 2.0
+        }
+      },
+      "style": {
+        "font": "Arial",
+        "font_size": 12,
+        "font_color": "#FFFFFF",
+        "background_color": "transparent"
+      }
+    },
+    {
+      "type": "alcohol",
+      "category": "beer",
+      "media_types": ["video"],
+      "duration_rules": {
+        "all": {
+          "text": "ENJOY RESPONSIBLY",
+          "position": "bottom_center",
+          "show_at_end": true
+        }
+      },
+      "style": {
+        "font": "Arial",
+        "font_size": 12,
+        "font_color": "#FFFFFF"
+      }
+    },
+    {
+      "type": "tobacco",
+      "category": "all",
+      "media_types": ["video", "print"],
+      "duration_rules": {
+        "all": {
+          "text": "SURGEON GENERAL'S WARNING: Smoking Causes Lung Cancer, Heart Disease, Emphysema, And May Complicate Pregnancy",
+          "position": "bottom_center",
+          "show_at_start": true,
+          "show_at_end": true
+        }
+      },
+      "style": {
+        "font": "Arial",
+        "font_size": 10,
+        "font_color": "#FFFFFF",
+        "background_color": "#000000"
+      }
+    },
+    {
+      "type": "pharmaceutical",
+      "category": "prescription",
+      "media_types": ["video"],
+      "duration_rules": {
+        "under_60s": {
+          "text": "Ask your doctor if [PRODUCT] is right for you",
+          "position": "bottom_center",
+          "show_at_end": true
+        },
+        "60s_and_above": {
+          "text": "See our ad in [PUBLICATION] for full prescribing information. Ask your doctor about [PRODUCT]",
+          "position": "bottom_center",
+          "show_at_end": true,
+          "voice_over_required": true
+        }
+      },
+      "style": {
+        "font": "Arial",
+        "font_size": 10,
+        "font_color": "#FFFFFF"
+      }
+    },
+    {
+      "type": "gambling",
+      "category": "all",
+      "media_types": ["video", "digital"],
+      "duration_rules": {
+        "all": {
+          "text": "GAMBLING PROBLEM? CALL 1-800-522-4700",
+          "position": "bottom_center",
+          "show_at_end": true
+        }
+      },
+      "style": {
+        "font": "Arial",
+        "font_size": 11,
+        "font_color": "#FFFFFF"
+      }
+    }
+  ],
+  "age_gate": {
+    "required_for": ["alcohol", "tobacco", "gambling"],
+    "minimum_age": 21,
+    "text": "MUST BE 21+ TO PURCHASE"
+  },
+  "notes": "US legal requirements per FTC, FDA, and state regulations"
+}

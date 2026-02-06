@@ -187,7 +187,9 @@ async def process_legal(
     country_code: str,
     media_type: str,
     usage_type: str,
-    auto_position: bool
+    auto_position: bool,
+    position: Optional[str] = None,
+    auto_detect_product: bool = True
 ):
     """Background task để thêm nội dung pháp lý"""
     try:
@@ -195,6 +197,20 @@ async def process_legal(
         
         from src.legal.overlay import LegalOverlay
         from src.legal.database import MediaType, UsageType
+        from src.legal.product_detector import ProductDetector
+        
+        product_type = None
+        
+        # 1. Detect product type from video (if enabled)
+        if auto_detect_product:
+            try:
+                detector = ProductDetector()
+                product_type, confidence, label = detector.detect_from_video(video_path)
+                logger.info(f"Video detected as: {product_type} ({label}) - {confidence:.2%}")
+            except Exception as e:
+                logger.error(f"Product detection failed: {e}")
+            
+        update_job(job_id, progress=30)
         
         overlay = LegalOverlay(str(OUTPUT_DIR))
         
@@ -205,7 +221,9 @@ async def process_legal(
             country_code,
             MediaType(media_type),
             UsageType(usage_type),
-            auto_detect_position=auto_position
+            auto_detect_position=auto_position,
+            product_type=product_type,
+            manual_position=position
         )
         
         update_job(
@@ -249,7 +267,7 @@ async def health_check():
 async def add_subtitle(
     background_tasks: BackgroundTasks,
     video: UploadFile = File(...),
-    excel: UploadFile = File(...),
+    excel: Optional[UploadFile] = File(None),
     language: str = Form("vi"),
     video_format: str = Form("16x9")
 ):
@@ -447,7 +465,9 @@ async def add_legal_content(
     country_code: str = Form(...),
     media_type: str = Form("social"),
     usage_type: str = Form("shareable"),
-    auto_position: bool = Form(True)
+    auto_position: bool = Form(True),
+    position: Optional[str] = Form(None),
+    auto_detect_product: bool = Form(True)
 ):
     """
     Thêm nội dung pháp lý vào video
@@ -456,7 +476,9 @@ async def add_legal_content(
     - **country_code**: Mã quốc gia (VN, FR, US, HK)
     - **media_type**: Loại media (social, tv, ooh, digital, print)
     - **usage_type**: Hình thức sử dụng (shareable, non_shareable, paid, organic)
-    - **auto_position**: Tự động phát hiện vị trí tối ưu
+    - **auto_position**: Tự động phát hiện vị trí tối ưu (deprecated in logic if position is set, but kept for API compat)
+    - **position**: Vị trí thủ công (bottom_left, bottom_right, etc.) overrides auto_position
+    - **auto_detect_product**: Tự động phát hiện loại sản phẩm bằng CLIP
     """
     video_path = save_upload(video, "video_")
     
@@ -474,10 +496,99 @@ async def add_legal_content(
         country_code.upper(),
         media_type,
         usage_type,
-        auto_position
+        auto_position,
+        position,
+        auto_detect_product
     )
     
     return {"job_id": job_id, "message": "Processing started"}
+
+
+@app.post("/api/legal-image")
+async def add_legal_image(
+    image: UploadFile = File(...),
+    country_code: str = Form(...),
+    position: str = Form("bottom_left"),
+    auto_detect: bool = Form(False)
+):
+    """
+    Thêm nội dung pháp lý vào ảnh tĩnh (print, cover, banner)
+    
+    - **image**: File ảnh (jpg, png)
+    - **country_code**: Mã quốc gia (VN, FR, US, HK)
+    - **position**: Vị trí (bottom_left, bottom_right, bottom_center, top_left, top_right)
+    - **auto_detect**: Tự động phát hiện loại sản phẩm bằng CLIP
+    """
+    from src.legal.image_overlay import ImageLegalOverlay
+    from src.legal.database import MediaType, UsageType
+    
+    # Validate file type
+    if not image.content_type.startswith('image/'):
+        raise HTTPException(status_code=400, detail="File phải là ảnh (jpg, png)")
+    
+    # Save uploaded image
+    image_path = save_upload(image, "image_")
+    
+    try:
+        overlay = ImageLegalOverlay(str(OUTPUT_DIR))
+        output_path = overlay.add_legal_content(
+            str(image_path),
+            country_code.upper(),
+            MediaType.PRINT,
+            UsageType.PAID,
+            position=position,
+            auto_detect_product=auto_detect
+        )
+        
+        return FileResponse(
+            output_path,
+            media_type="image/jpeg",
+            filename=f"legal_{country_code}_{Path(output_path).name}"
+        )
+        
+    except Exception as e:
+        logger.error(f"Image legal failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/detect-product")
+async def detect_product(
+    file: UploadFile = File(...)
+):
+    """
+    Tự động nhận diện loại sản phẩm trong ảnh/video bằng CLIP
+    
+    - **file**: File ảnh (jpg, png) hoặc video (mp4, mov)
+    
+    Returns:
+        - product_type: alcohol, tobacco, pharmaceutical, food, unknown
+        - confidence: độ tin cậy (0-1)
+        - detected_label: nhãn cụ thể được phát hiện
+    """
+    from src.legal.product_detector import get_product_detector
+    
+    # Save uploaded file
+    file_path = save_upload(file, "detect_")
+    
+    try:
+        detector = get_product_detector()
+        
+        # Check if video or image
+        if file.content_type.startswith('video/'):
+            category, confidence, label = detector.detect_from_video(str(file_path))
+        else:
+            category, confidence, label = detector.detect_product(str(file_path))
+        
+        return {
+            "product_type": category,
+            "confidence": round(confidence, 3),
+            "detected_label": label,
+            "legal_rules_available": category != "unknown"
+        }
+        
+    except Exception as e:
+        logger.error(f"Product detection failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/master/replace-logo")

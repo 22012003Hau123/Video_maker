@@ -42,6 +42,7 @@ class LegalContent:
     display_at: str = "end"     # Hiển thị: start, end, both
     font_size: int = 24
     duration_on_screen: float = 3.0  # Thời gian hiển thị (giây)
+    product_type: str = "alcohol"  # Loại sản phẩm: alcohol, tobacco, pharmaceutical, food
     
 
 @dataclass 
@@ -149,40 +150,99 @@ class LegalDatabase:
         ),
     }
     
-    def __init__(self, data_path: Optional[str] = None):
-        self.data_path = Path(data_path) if data_path else None
+    def __init__(self, templates_dir: Optional[str] = None):
+        self.templates_dir = Path(templates_dir) if templates_dir else Path(__file__).parent.parent.parent / "data" / "legal_templates"
         self.countries: Dict[str, CountryLegalConfig] = {}
         self._load_defaults()
-        if self.data_path:
-            self._load_custom_data()
+        self._load_json_templates()
     
     def _load_defaults(self):
         """Load dữ liệu mặc định"""
         self.countries = self.DEFAULT_LEGAL_CONTENTS.copy()
     
-    def _load_custom_data(self):
-        """Load dữ liệu custom từ file JSON"""
-        if self.data_path and self.data_path.exists():
+    def _load_json_templates(self):
+        """Load dữ liệu từ các file JSON template"""
+        if not self.templates_dir.exists():
+            logger.warning(f"Templates directory not found: {self.templates_dir}")
+            return
+        
+        for json_file in self.templates_dir.glob("*.json"):
             try:
-                with open(self.data_path, 'r', encoding='utf-8') as f:
+                with open(json_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    # Parse and merge with defaults
-                    for country_code, config in data.items():
-                        if country_code in self.countries:
-                            # Merge
-                            pass
-                        else:
-                            # Add new
-                            pass
+                    country_code = data.get('country_code', json_file.stem.upper())
+                    
+                    # Parse rules into LegalContent objects
+                    legal_contents = []
+                    for rule in data.get('rules', []):
+                        for duration_key, duration_config in rule.get('duration_rules', {}).items():
+                            # Determine min_duration based on key
+                            min_duration = 0
+                            if duration_key == '30s_and_above':
+                                min_duration = 30
+                            elif duration_key == '60s_and_above':
+                                min_duration = 60
+                            elif duration_key.startswith('under_'):
+                                min_duration = 0
+                            
+                            # Get text (support bilingual)
+                            text = duration_config.get('text', '')
+                            if not text and duration_config.get('bilingual'):
+                                text = duration_config.get('text_zh', '') + ' / ' + duration_config.get('text_en', '')
+                            
+                            # Map media types
+                            for media_type_str in rule.get('media_types', ['video']):
+                                media_type = MediaType.DIGITAL
+                                if media_type_str == 'video':
+                                    media_type = MediaType.TV
+                                elif media_type_str == 'print':
+                                    media_type = MediaType.PRINT
+                                elif media_type_str == 'digital':
+                                    media_type = MediaType.DIGITAL
+                                
+                                # Determine display_at
+                                display_at = 'end'
+                                if duration_config.get('show_at_start') and duration_config.get('show_at_end'):
+                                    display_at = 'both'
+                                elif duration_config.get('show_at_start'):
+                                    display_at = 'start'
+                                
+                                style = rule.get('style', {})
+                                rule_type = rule.get('type', 'alcohol')  # Get product type from JSON
+                                
+                                legal_contents.append(LegalContent(
+                                    country_code=country_code,
+                                    media_type=media_type,
+                                    usage_type=UsageType.PAID,
+                                    text=text,
+                                    min_duration=min_duration,
+                                    position=duration_config.get('position', 'bottom'),
+                                    display_at=display_at,
+                                    font_size=style.get('font_size', 14),
+                                    duration_on_screen=duration_config.get('min_display_duration', 3.0),
+                                    product_type=rule_type
+                                ))
+                    
+                    # Create or update country config
+                    self.countries[country_code] = CountryLegalConfig(
+                        country_code=country_code,
+                        country_name=data.get('country_name', country_code),
+                        default_disclaimer=legal_contents[0].text if legal_contents else '',
+                        legal_contents=legal_contents
+                    )
+                    
+                    logger.info(f"Loaded legal template: {country_code} with {len(legal_contents)} rules")
+                    
             except Exception as e:
-                logger.error(f"Failed to load custom legal data: {e}")
+                logger.error(f"Failed to load {json_file}: {e}")
     
     def get_legal_content(
         self,
         country_code: str,
         media_type: MediaType,
         usage_type: UsageType,
-        video_duration: float = 0
+        video_duration: float = 0,
+        product_type: Optional[str] = None
     ) -> Optional[LegalContent]:
         """
         Lấy nội dung pháp lý phù hợp
@@ -192,6 +252,7 @@ class LegalDatabase:
             media_type: Loại media
             usage_type: Hình thức sử dụng
             video_duration: Thời lượng video (giây)
+            product_type: Loại sản phẩm (alcohol, tobacco, pharmaceutical, food) - từ CLIP
             
         Returns:
             LegalContent phù hợp hoặc None
@@ -203,12 +264,30 @@ class LegalDatabase:
         
         config = self.countries[country_code]
         
+        # Map product_type to category names used in JSON templates
+        product_map = {
+            "alcohol": ["alcohol", "spirits", "wine", "beer"],
+            "tobacco": ["tobacco", "smoking"],
+            "pharmaceutical": ["pharmaceutical", "pharma", "medicine", "health"],
+            "food": ["food", "infant_formula", "baby", "supplement"]
+        }
+        
         # Tìm legal content phù hợp
         matching = []
         for lc in config.legal_contents:
+            # Check media type and usage type first
             if lc.media_type == media_type and lc.usage_type == usage_type:
                 if video_duration >= lc.min_duration:
-                    matching.append(lc)
+                    # Filter by product_type if specified
+                    if product_type:
+                        # Match if lc.product_type equals the detected type
+                        if lc.product_type == product_type:
+                            matching.append(lc)
+                            logger.info(f"Matched: {product_type} -> {lc.text[:50]}...")
+                    else:
+                        # No product_type specified, use default (alcohol)
+                        if lc.product_type == "alcohol":
+                            matching.append(lc)
         
         if matching:
             # Chọn content có min_duration cao nhất phù hợp

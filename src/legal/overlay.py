@@ -63,7 +63,10 @@ class LegalOverlay:
         media_type: MediaType = MediaType.SOCIAL,
         usage_type: UsageType = UsageType.SHAREABLE,
         output_path: Optional[str] = None,
-        auto_detect_position: bool = True
+        output_path: Optional[str] = None,
+        auto_detect_position: bool = True,
+        product_type: Optional[str] = None,
+        manual_position: Optional[str] = None
     ) -> str:
         """
         Thêm nội dung pháp lý vào video
@@ -85,7 +88,7 @@ class LegalOverlay:
         
         # Lấy nội dung pháp lý
         legal = self.database.get_legal_content(
-            country_code, media_type, usage_type, duration
+            country_code, media_type, usage_type, duration, product_type
         )
         
         if not legal:
@@ -97,23 +100,45 @@ class LegalOverlay:
             output_path = self.output_dir / f"{video_path.stem}_legal{video_path.suffix}"
         
         # Xác định vị trí
-        position_y = height - 80 if legal.position == "bottom" else 50
+        if manual_position:
+            position = manual_position
+            # Nếu đã chọn vị trí thủ công thì disable AI vision positioning
+            auto_detect_position = False
+        elif hasattr(legal, 'position'):
+            position = legal.position
+        else:
+            position = "bottom_left"
+        
+        # Safe margin ~3% của chiều cao
+        safe_margin = int(height * 0.03)
+        
+        # Tính toán vị trí x, y theo position
+        position_map = {
+            "bottom_left": (f"{safe_margin}", f"{height - safe_margin}"),
+            "bottom_right": (f"w-text_w-{safe_margin}", f"{height - safe_margin}"),
+            "bottom_center": (f"(w-text_w)/2", f"{height - safe_margin}"),
+            "top_left": (f"{safe_margin}", f"{safe_margin + 20}"),
+            "top_right": (f"w-text_w-{safe_margin}", f"{safe_margin + 20}"),
+            "top": (f"(w-text_w)/2", f"{safe_margin + 20}"),
+        }
+        
+        pos_x, pos_y = position_map.get(position, position_map["bottom_left"])
         
         if auto_detect_position:
             try:
                 suggestions = self.scene_detector.suggest_legal_position(str(video_path))
                 if suggestions.get("position") == "top":
-                    position_y = 50
+                    pos_y = f"{safe_margin + 20}"
             except Exception as e:
                 logger.warning(f"Could not auto-detect position: {e}")
         
         # Tạo filter cho text overlay
         filters = []
         
-        # Font settings
-        fontsize = legal.font_size
-        if width < 1920:
-            fontsize = int(fontsize * width / 1920)
+        # Font settings - chữ nhỏ cho legal (khoảng 2-3% chiều cao video)
+        fontsize = legal.font_size if hasattr(legal, 'font_size') else 14
+        # Scale theo chiều cao video, chuẩn là 1080p -> fontsize 14-18
+        fontsize = max(10, int(fontsize * height / 1080))
         
         # Text cuối video
         if legal.display_at in ["end", "both"]:
@@ -122,10 +147,10 @@ class LegalOverlay:
                 f"drawtext=text='{self._escape_text(legal.text)}':"
                 f"fontsize={fontsize}:"
                 f"fontcolor=white:"
-                f"borderw=2:"
+                f"borderw=1:"
                 f"bordercolor=black:"
-                f"x=(w-text_w)/2:"
-                f"y={position_y}:"
+                f"x={pos_x}:"
+                f"y={pos_y}:"
                 f"enable='between(t,{end_start},{duration})'"
             )
             filters.append(text_filter)
@@ -136,26 +161,27 @@ class LegalOverlay:
                 f"drawtext=text='{self._escape_text(legal.text)}':"
                 f"fontsize={fontsize}:"
                 f"fontcolor=white:"
-                f"borderw=2:"
+                f"borderw=1:"
                 f"bordercolor=black:"
-                f"x=(w-text_w)/2:"
-                f"y={position_y}:"
+                f"x={pos_x}:"
+                f"y={pos_y}:"
                 f"enable='between(t,0,{legal.duration_on_screen})'"
             )
             filters.append(text_filter)
         
-        # Text secondary (nếu có)
+        # Text secondary (nếu có) - dòng thứ 2 bên dưới
         if legal.text_secondary and legal.display_at in ["end", "both"]:
             end_start = duration - legal.duration_on_screen
-            secondary_y = position_y + fontsize + 10
+            # Dòng 2 cách dòng 1 khoảng fontsize + 5px
+            secondary_y_offset = fontsize + 5
             text_filter = (
                 f"drawtext=text='{self._escape_text(legal.text_secondary)}':"
-                f"fontsize={int(fontsize * 0.8)}:"
+                f"fontsize={int(fontsize * 0.9)}:"
                 f"fontcolor=white:"
-                f"borderw=2:"
+                f"borderw=1:"
                 f"bordercolor=black:"
-                f"x=(w-text_w)/2:"
-                f"y={secondary_y}:"
+                f"x={pos_x}:"
+                f"y={pos_y}+{secondary_y_offset}:"
                 f"enable='between(t,{end_start},{duration})'"
             )
             filters.append(text_filter)

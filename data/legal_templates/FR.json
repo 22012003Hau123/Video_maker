@@ -1,0 +1,88 @@
+{
+  "country_code": "FR",
+  "country_name": "France",
+  "language": "fr",
+  "default_font": "Arial",
+  "default_font_size": 14,
+  "rules": [
+    {
+      "type": "alcohol",
+      "category": "spirits",
+      "media_types": ["video", "print", "digital"],
+      "duration_rules": {
+        "all": {
+          "text": "L'ABUS D'ALCOOL EST DANGEREUX POUR LA SANTÉ, À CONSOMMER AVEC MODÉRATION",
+          "position": "bottom_left",
+          "show_at_start": true,
+          "show_at_end": true,
+          "min_display_duration": 3.0
+        }
+      },
+      "style": {
+        "font": "Arial",
+        "font_size": 14,
+        "font_color": "#FFFFFF",
+        "background_color": "#000000",
+        "background_opacity": 0.7
+      }
+    },
+    {
+      "type": "alcohol",
+      "category": "wine",
+      "media_types": ["video", "print", "digital"],
+      "duration_rules": {
+        "all": {
+          "text": "L'ABUS D'ALCOOL EST DANGEREUX POUR LA SANTÉ",
+          "position": "bottom_center",
+          "show_at_start": true,
+          "show_at_end": true,
+          "min_display_duration": 2.0
+        }
+      },
+      "style": {
+        "font": "Arial",
+        "font_size": 12,
+        "font_color": "#FFFFFF",
+        "background_color": "#000000",
+        "background_opacity": 0.7
+      }
+    },
+    {
+      "type": "tobacco",
+      "category": "all",
+      "media_types": ["video", "print"],
+      "duration_rules": {
+        "all": {
+          "text": "FUMER TUE",
+          "position": "bottom_center",
+          "show_at_start": true,
+          "show_at_end": true
+        }
+      },
+      "style": {
+        "font": "Arial",
+        "font_size": 16,
+        "font_color": "#FFFFFF",
+        "background_color": "#000000"
+      }
+    },
+    {
+      "type": "gambling",
+      "category": "all",
+      "media_types": ["video", "digital"],
+      "duration_rules": {
+        "all": {
+          "text": "JOUER COMPORTE DES RISQUES : ENDETTEMENT, DÉPENDANCE... APPELEZ LE 09 74 75 13 13",
+          "position": "bottom_center",
+          "show_at_end": true
+        }
+      },
+      "style": {
+        "font": "Arial",
+        "font_size": 12,
+        "font_color": "#FFFFFF"
+      }
+    }
+  ],
+  "notes": "French legal requirements as per Loi Évin and CSA regulations"
+}

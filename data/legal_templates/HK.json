@@ -1,0 +1,107 @@
+{
+  "country_code": "HK",
+  "country_name": "Hong Kong",
+  "language": "zh",
+  "default_font": "Noto Sans CJK",
+  "default_font_size": 14,
+  "rules": [
+    {
+      "type": "alcohol",
+      "category": "all",
+      "media_types": ["video", "print", "digital"],
+      "duration_rules": {
+        "all": {
+          "text_zh": "飲酒須適量",
+          "text_en": "DRINK RESPONSIBLY",
+          "bilingual": true,
+          "position": "bottom_left",
+          "show_at_end": true,
+          "min_display_duration": 2.0
+        }
+      },
+      "style": {
+        "font": "Noto Sans CJK",
+        "font_size": 14,
+        "font_color": "#FFFFFF",
+        "background_color": "#000000",
+        "background_opacity": 0.7
+      }
+    },
+    {
+      "type": "tobacco",
+      "category": "all",
+      "media_types": ["video", "print"],
+      "duration_rules": {
+        "all": {
+          "text_zh": "吸煙引致肺癌及心臟病",
+          "text_en": "SMOKING CAUSES LUNG CANCER AND HEART DISEASE",
+          "bilingual": true,
+          "position": "bottom_left",
+          "show_at_start": true,
+          "show_at_end": true
+        }
+      },
+      "style": {
+        "font": "Noto Sans CJK",
+        "font_size": 14,
+        "font_color": "#FFFFFF",
+        "background_color": "#000000"
+      },
+      "health_warning_image": {
+        "required": true,
+        "min_coverage": 0.5,
+        "position": "front_and_back"
+      }
+    },
+    {
+      "type": "gambling",
+      "category": "all",
+      "media_types": ["video", "digital"],
+      "duration_rules": {
+        "all": {
+          "text_zh": "賭博必須節制 如有問題請致電戒賭熱線",
+          "text_en": "GAMBLE RESPONSIBLY. PROBLEM GAMBLING HOTLINE",
+          "bilingual": true,
+          "position": "bottom_left",
+          "show_at_end": true
+        }
+      },
+      "style": {
+        "font": "Noto Sans CJK",
+        "font_size": 12,
+        "font_color": "#FFFFFF"
+      }
+    },
+    {
+      "type": "food",
+      "category": "health_claims",
+      "media_types": ["video", "print"],
+      "duration_rules": {
+        "all": {
+          "text_zh": "此產品並非為治療或預防任何疾病而設",
+          "text_en": "This product is not intended to treat or prevent any disease",
+          "bilingual": true,
+          "position": "bottom_left",
+          "show_at_end": true
+        }
+      },
+      "style": {
+        "font": "Noto Sans CJK",
+        "font_size": 10,
+        "font_color": "#FFFFFF"
+      }
+    }
+  ],
+  "age_gate": {
+    "required_for": ["alcohol", "tobacco"],
+    "minimum_age": 18,
+    "text_zh": "未滿18歲人士不得購買",
+    "text_en": "NOT FOR SALE TO PERSONS UNDER 18"
+  },
+  "bilingual_requirements": {
+    "primary": "zh",
+    "secondary": "en",
+    "note": "Hong Kong requires bilingual (Chinese and English) for most official communications"
+  },
+  "notes": "Per Hong Kong Broadcasting Authority and Tobacco Advertising Ban Ordinance"
+}
