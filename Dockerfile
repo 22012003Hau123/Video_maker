@@ -32,7 +32,9 @@ COPY requirements.txt .
 RUN echo "setuptools<81" > /tmp/constraints.txt
 ENV PIP_CONSTRAINT=/tmp/constraints.txt
 
+# Install CPU-only PyTorch first (saves ~1.5GB vs CUDA version)
 RUN pip install --no-cache-dir --upgrade pip "setuptools<81" wheel && \
+    pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
