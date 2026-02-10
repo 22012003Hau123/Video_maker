@@ -91,7 +91,24 @@ def update_job(job_id: str, **kwargs):
 
 def save_upload(file: UploadFile, prefix: str = "") -> Path:
     """Save uploaded file and return path"""
-    ext = Path(file.filename).suffix
+    ext = Path(file.filename).suffix if file.filename else ""
+    
+    # Fallback: detect extension from content_type if filename has no extension
+    if not ext and file.content_type:
+        content_type_map = {
+            "video/mp4": ".mp4",
+            "video/quicktime": ".mov",
+            "video/x-msvideo": ".avi",
+            "video/webm": ".webm",
+            "video/x-matroska": ".mkv",
+            "image/jpeg": ".jpg",
+            "image/png": ".png",
+            "image/webp": ".webp",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+            "application/vnd.ms-excel": ".xls",
+        }
+        ext = content_type_map.get(file.content_type, "")
+    
     filename = f"{prefix}{uuid.uuid4().hex}{ext}"
     filepath = UPLOAD_DIR / filename
     
