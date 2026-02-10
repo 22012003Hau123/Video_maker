@@ -43,6 +43,7 @@ class TimingSync:
         self.model_size = model_size
         self.model = None
         self._openai_client = None
+        self.detected_language = None  # Ngôn ngữ Whisper detect được
         
     def _get_openai_client(self):
         """Lấy OpenAI client"""
@@ -80,11 +81,18 @@ class TimingSync:
         if model is None:
             raise RuntimeError("Whisper model not available")
         
-        result = model.transcribe(
-            audio_path,
-            language=language,
-            word_timestamps=True
-        )
+        transcribe_params = {
+            "word_timestamps": True
+        }
+        # Nếu language="auto", không truyền language để Whisper tự detect
+        if language and language != "auto":
+            transcribe_params["language"] = language
+        
+        result = model.transcribe(audio_path, **transcribe_params)
+        
+        # Lưu ngôn ngữ detected
+        self.detected_language = result.get("language", language)
+        logger.info(f"Whisper local detected language: {self.detected_language}")
         
         segments = []
         for seg in result.get("segments", []):
@@ -101,14 +109,24 @@ class TimingSync:
         """Transcribe sử dụng OpenAI Whisper API"""
         client = self._get_openai_client()
         
+        # Nếu language="auto", không truyền language để Whisper tự detect
+        api_params = {
+            "model": "whisper-1",
+            "file": None,  # sẽ set bên dưới
+            "response_format": "verbose_json",
+            "timestamp_granularities": ["word", "segment"]
+        }
+        if language and language != "auto":
+            api_params["language"] = language
+        
         with open(audio_path, "rb") as audio_file:
-            response = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio_file,
-                language=language,
-                response_format="verbose_json",
-                timestamp_granularities=["word", "segment"]
-            )
+            api_params["file"] = audio_file
+            response = client.audio.transcriptions.create(**api_params)
+        
+        # Lưu ngôn ngữ được detect (dùng khi source_language="auto")
+        detected_lang = getattr(response, 'language', language)
+        self.detected_language = detected_lang
+        logger.info(f"Whisper detected language: {detected_lang}")
         
         # Xây dựng word-level timing map để refine segment timing
         word_timings = []

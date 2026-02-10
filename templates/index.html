@@ -455,11 +455,20 @@ Craft. Time. And a story worth savoring."></textarea>
                 <div class="grid-2">
                     <div class="form-group">
                         <label>Source Language</label>
-                        <select name="source_language">
+                        <select name="source_language" id="source-language-select" disabled>
+                            <option value="auto">🔍 Auto Detect</option>
                             <option value="en">🇺🇸 English</option>
                             <option value="vi">🇻🇳 Vietnamese</option>
                             <option value="fr">🇫🇷 French</option>
                             <option value="zh">🇨🇳 Chinese</option>
+                            <option value="ja">🇯🇵 Japanese</option>
+                            <option value="ko">🇰🇷 Korean</option>
+                            <option value="de">🇩🇪 German</option>
+                            <option value="es">🇪🇸 Spanish</option>
+                            <option value="pt">🇵🇹 Portuguese</option>
+                            <option value="it">🇮🇹 Italian</option>
+                            <option value="th">🇹🇭 Thai</option>
+                            <option value="id">🇮🇩 Indonesian</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -643,7 +652,10 @@ Craft. Time. And a story worth savoring."></textarea>
         <!-- Master Panel -->
         <div id="panel-master" class="panel">
             <h2><i class="ph ph-faders"></i> Video Mastering</h2>
+            
+            <!-- Classic Mastering: Logo / Packshot -->
             <form id="master-form" onsubmit="submitMaster(event)">
+                <h3 style="margin-top: 0;"><i class="ph ph-squares-four"></i> Classic Master (Logo, Packshot)</h3>
                 <div class="grid-2">
                     <div class="form-group">
                         <label>Video File</label>
@@ -678,6 +690,73 @@ Craft. Time. And a story worth savoring."></textarea>
                 
                 <div id="master-status" class="status-box" style="display: none;"></div>
             </form>
+
+            <hr style="margin: 2rem 0; border: none; border-top: 1px dashed var(--border-color);">
+
+            <!-- SAM3 + VEO 2 Interactive Object Removal -->
+            <div id="master-sam3-veo">
+                <h3><i class="ph ph-magic-wand"></i> Smart Object Removal (SAM 3 + VEO 2)</h3>
+                <p style="margin-top: 0; font-size: 0.9rem; color: var(--text-muted);">
+                    Chọn cùng file video ở trên, trích 1 frame, click vào object cần xoá, sau đó chạy VEO 2 để xoá object khỏi toàn bộ video.
+                </p>
+                
+                <div class="grid-2">
+                    <div>
+                        <div class="form-group">
+                            <label>1. Thời điểm frame (giây)</label>
+                            <input type="number" id="sam3-frame-time" class="input" min="0" step="0.1" value="0">
+                            <button type="button" class="btn btn-secondary" style="margin-top: 0.5rem;" onclick="sam3ExtractFrame()">
+                                <i class="ph ph-image"></i> Extract Frame
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="form-group">
+                            <label>2. Prompt (tuỳ chọn)</label>
+                            <input type="text" id="sam3-prompt" class="input" placeholder="Ví dụ: remove the person in red shirt">
+                            <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;">
+                                VEO 2 ưu tiên mask, prompt giúp định hướng kết quả (sẽ được log lại).
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>3. Chọn object trên frame (click hoặc quét khối)</label>
+                    <div id="sam3-frame-container" style="position: relative; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color); background: #000; min-height: 220px; display: block;">
+                        <img
+                            id="sam3-frame-image"
+                            src=""
+                            alt="Frame preview"
+                            style="width: 100%; height: auto; display: none; cursor: crosshair;"
+                            draggable="false"
+                            onmousedown="onSam3FrameMouseDown(event)"
+                            onmousemove="onSam3FrameMouseMove(event)"
+                            onmouseup="onSam3FrameMouseUp(event)"
+                            onmouseleave="onSam3FrameMouseLeave(event)"
+                        >
+                        <img id="sam3-mask-image" src="" alt="Mask overlay" style="width: 100%; height: auto; display: none; position: absolute; top: 0; left: 0; mix-blend-mode: screen; opacity: 0.6; pointer-events: none;">
+                        <div id="sam3-box-overlay" style="position: absolute; border: 2px dashed #3b82f6; display: none; pointer-events: none; box-sizing: border-box;"></div>
+                        <div id="sam3-frame-placeholder" style="color: rgba(255,255,255,0.7); text-align: center; padding: 1rem;">
+                            Chưa có frame. Chọn thời điểm và bấm <strong>Extract Frame</strong>.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>4. Action</label>
+                    <div class="grid-2">
+                        <button type="button" class="btn btn-primary" id="sam3-remove-btn" onclick="runSam3Edit('remove')">
+                            <i class="ph ph-eraser"></i> Remove Object
+                        </button>
+                        <button type="button" class="btn" id="sam3-replace-btn" onclick="runSam3Edit('replace')">
+                            <i class="ph ph-swap"></i> Replace Object
+                        </button>
+                    </div>
+                </div>
+
+                <div id="sam3-status" class="status-box" style="display: none;"></div>
+            </div>
         </div>
     </div>
     
@@ -694,6 +773,14 @@ Craft. Time. And a story worth savoring."></textarea>
         }
         
         let currentInputMode = 'auto';
+        // Master SAM3 + VEO state
+        let masterVideoPathServer = null;
+        let masterFramePathServer = null;
+        let masterMaskPathServer = null;
+        // Drag-box state
+        let sam3IsDragging = false;
+        let sam3DragStart = null;
+        let sam3DragCurrent = null;
         
         function switchInputMode(mode) {
             currentInputMode = mode;
@@ -709,6 +796,23 @@ Craft. Time. And a story worth savoring."></textarea>
             
             const target = document.getElementById(mode + '-input');
             if (target) target.classList.add('active');
+            
+            // Lock/unlock Source Language dropdown
+            const srcLangSelect = document.getElementById('source-language-select');
+            if (srcLangSelect) {
+                if (mode === 'auto') {
+                    // Auto mode: lock thành Auto Detect
+                    srcLangSelect.value = 'auto';
+                    srcLangSelect.disabled = true;
+                    srcLangSelect.style.opacity = '0.6';
+                    srcLangSelect.style.cursor = 'not-allowed';
+                } else {
+                    // Manual mode: cho phép chọn ngôn ngữ
+                    srcLangSelect.disabled = false;
+                    srcLangSelect.style.opacity = '1';
+                    srcLangSelect.style.cursor = 'pointer';
+                }
+            }
         }
         
         function updatePreview(input) {
@@ -732,6 +836,259 @@ Craft. Time. And a story worth savoring."></textarea>
             }
         }
         
+        async function sam3ExtractFrame() {
+            const videoInput = document.querySelector('#master-form input[name="video"]');
+            if (!videoInput || videoInput.files.length === 0) {
+                alert('Vui lòng chọn video ở phần Classic Master trước.');
+                return;
+            }
+            const videoFile = videoInput.files[0];
+            const timeInput = document.getElementById('sam3-frame-time');
+            const timeSeconds = parseFloat(timeInput.value || '0') || 0;
+            
+            const container = document.getElementById('sam3-frame-container');
+            const placeholder = document.getElementById('sam3-frame-placeholder');
+            const frameImg = document.getElementById('sam3-frame-image');
+            const maskImg = document.getElementById('sam3-mask-image');
+            const statusBox = document.getElementById('sam3-status');
+            
+            document.getElementById('sam3-remove-btn').disabled = true;
+            document.getElementById('sam3-replace-btn').disabled = true;
+            statusBox.style.display = 'block';
+            statusBox.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Extracting frame...';
+            
+            try {
+                const formData = new FormData();
+                formData.append('video', videoFile);
+                formData.append('time_seconds', timeSeconds);
+                
+                const response = await fetch('/api/master/extract-frame', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    throw new Error(err.detail || 'Extract frame failed');
+                }
+                const data = await response.json();
+                
+                masterVideoPathServer = data.video_path;
+                masterFramePathServer = data.frame_path;
+                masterMaskPathServer = null;
+                
+                placeholder.style.display = 'none';
+                frameImg.src = data.frame_data_url;
+                frameImg.style.display = 'block';
+                maskImg.style.display = 'none';
+                
+                statusBox.innerHTML = 'Frame extracted. Click vào object trên hình để tạo mask.';
+            } catch (error) {
+                console.error(error);
+                statusBox.innerHTML = '<i class="ph ph-x-circle"></i> ' + error.message;
+            } finally {
+                document.getElementById('sam3-remove-btn').disabled = false;
+                document.getElementById('sam3-replace-btn').disabled = false;
+            }
+        }
+        
+        async function sam3SegmentPoint(px, py, img) {
+            const maskImg = document.getElementById('sam3-mask-image');
+            const statusBox = document.getElementById('sam3-status');
+            
+            statusBox.style.display = 'block';
+            statusBox.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Running SAM 2 segmentation (point)...';
+            
+            try {
+                const formData = new FormData();
+                formData.append('frame_path', masterFramePathServer);
+                formData.append('mode', 'point');
+                formData.append('click_x', px);
+                formData.append('click_y', py);
+                
+                const response = await fetch('/api/master/segment', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    throw new Error(err.detail || 'Segmentation failed');
+                }
+                const data = await response.json();
+                
+                masterMaskPathServer = data.mask_path;
+                maskImg.src = data.mask_data_url;
+                maskImg.style.display = 'block';
+                
+                statusBox.innerHTML = 'Mask generated. Bấm Remove/Replace để chạy VEO.';
+            } catch (error) {
+                console.error(error);
+                statusBox.innerHTML = '<i class="ph ph-x-circle"></i> ' + error.message;
+            }
+        }
+
+        async function sam3SegmentBox(px1, py1, px2, py2) {
+            const maskImg = document.getElementById('sam3-mask-image');
+            const statusBox = document.getElementById('sam3-status');
+            
+            statusBox.style.display = 'block';
+            statusBox.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Running SAM 2 segmentation (box)...';
+            
+            try {
+                const formData = new FormData();
+                formData.append('frame_path', masterFramePathServer);
+                formData.append('mode', 'box');
+                
+                formData.append('x1', px1);
+                formData.append('y1', py1);
+                formData.append('x2', px2);
+                formData.append('y2', py2);
+                
+                const response = await fetch('/api/master/segment', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    throw new Error(err.detail || 'Segmentation failed');
+                }
+                const data = await response.json();
+                
+                masterMaskPathServer = data.mask_path;
+                maskImg.src = data.mask_data_url;
+                maskImg.style.display = 'block';
+                
+                statusBox.innerHTML = 'Mask generated (box). Bấm Remove/Replace để chạy VEO.';
+            } catch (error) {
+                console.error(error);
+                statusBox.innerHTML = '<i class="ph ph-x-circle"></i> ' + error.message;
+            }
+        }
+
+        function onSam3FrameMouseDown(event) {
+            event.preventDefault();
+            if (!masterFramePathServer) {
+                alert('Chưa có frame. Vui lòng bấm Extract Frame trước.');
+                return;
+            }
+            if (event.button !== 0) return;
+            const img = event.target;
+            const rect = img.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            sam3IsDragging = true;
+            sam3DragStart = { x, y };
+            sam3DragCurrent = { x, y };
+        }
+
+        function onSam3FrameMouseMove(event) {
+            event.preventDefault();
+            if (!sam3IsDragging) return;
+            const img = event.target;
+            const rect = img.getBoundingClientRect();
+            const container = document.getElementById('sam3-frame-container');
+            const containerRect = container.getBoundingClientRect();
+            const overlay = document.getElementById('sam3-box-overlay');
+
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            sam3DragCurrent = { x, y };
+
+            const x1 = Math.min(sam3DragStart.x, sam3DragCurrent.x);
+            const y1 = Math.min(sam3DragStart.y, sam3DragCurrent.y);
+            const x2 = Math.max(sam3DragStart.x, sam3DragCurrent.x);
+            const y2 = Math.max(sam3DragStart.y, sam3DragCurrent.y);
+
+            overlay.style.display = 'block';
+            overlay.style.left = (rect.left - containerRect.left + x1) + 'px';
+            overlay.style.top = (rect.top - containerRect.top + y1) + 'px';
+            overlay.style.width = (x2 - x1) + 'px';
+            overlay.style.height = (y2 - y1) + 'px';
+        }
+
+        function onSam3FrameMouseUp(event) {
+            event.preventDefault();
+            if (!sam3IsDragging) return;
+            const img = event.target;
+            const overlay = document.getElementById('sam3-box-overlay');
+
+            sam3IsDragging = false;
+            overlay.style.display = 'none';
+
+            if (!masterFramePathServer) return;
+
+            const start = sam3DragStart;
+            const end = sam3DragCurrent || sam3DragStart;
+            const dx = Math.abs(end.x - start.x);
+            const dy = Math.abs(end.y - start.y);
+
+            const rect = img.getBoundingClientRect();
+            const scaleX = img.naturalWidth / img.clientWidth;
+            const scaleY = img.naturalHeight / img.clientHeight;
+
+            // Nếu drag rất nhỏ thì coi như click point
+            if (dx < 5 && dy < 5) {
+                const px = start.x * scaleX;
+                const py = start.y * scaleY;
+                sam3SegmentPoint(px, py, img);
+            } else {
+                const x1 = Math.min(start.x, end.x) * scaleX;
+                const y1 = Math.min(start.y, end.y) * scaleY;
+                const x2 = Math.max(start.x, end.x) * scaleX;
+                const y2 = Math.max(start.y, end.y) * scaleY;
+                sam3SegmentBox(x1, y1, x2, y2);
+            }
+
+            sam3DragStart = null;
+            sam3DragCurrent = null;
+        }
+
+        function onSam3FrameMouseLeave(event) {
+            if (!sam3IsDragging) return;
+            const overlay = document.getElementById('sam3-box-overlay');
+            sam3IsDragging = false;
+            sam3DragStart = null;
+            sam3DragCurrent = null;
+            overlay.style.display = 'none';
+        }
+        
+        async function runSam3Edit(action) {
+            if (!masterVideoPathServer || !masterMaskPathServer) {
+                alert('Vui lòng extract frame và click chọn object trước.');
+                return;
+            }
+            const prompt = document.getElementById('sam3-prompt').value || '';
+            const statusBox = document.getElementById('sam3-status');
+            
+            document.getElementById('sam3-remove-btn').disabled = true;
+            document.getElementById('sam3-replace-btn').disabled = true;
+            statusBox.style.display = 'block';
+            statusBox.innerHTML = `<i class="ph ph-spinner ph-spin"></i> Sending job to VEO 2 (${action})...`;
+            
+            try {
+                const formData = new FormData();
+                formData.append('video_path', masterVideoPathServer);
+                formData.append('mask_path', masterMaskPathServer);
+                formData.append('action', action);
+                formData.append('prompt', prompt);
+                
+                const response = await fetch('/api/master/edit-object', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (data.job_id) {
+                    pollJobStatus(data.job_id, 'sam3-status');
+                } else {
+                    statusBox.innerHTML = '<i class="ph ph-x-circle"></i> Không nhận được job_id từ backend.';
+                }
+            } catch (error) {
+                console.error(error);
+                statusBox.innerHTML = '<i class="ph ph-x-circle"></i> ' + error.message;
+                document.getElementById('sam3-remove-btn').disabled = false;
+                document.getElementById('sam3-replace-btn').disabled = false;
+            }
+        }
+        
         async function submitSubtitle(e) {
             e.preventDefault();
             const form = e.target;
@@ -747,6 +1104,11 @@ Craft. Time. And a story worth savoring."></textarea>
             // 2. Handle Export Flags
             formData.set('export_video', form.querySelector('input[name="export_video"]').checked);
             formData.set('export_srt', form.querySelector('input[name="export_srt"]').checked);
+            
+            // 3. Handle Source Language (disabled select không gửi value)
+            if (currentInputMode === 'auto') {
+                formData.set('source_language', 'auto');
+            }
             
             // Determine endpoint based on input mode
             let endpoint = '/api/subtitle';

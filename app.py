@@ -5,6 +5,7 @@ import os
 import logging
 import shutil
 import uuid
+import base64
 from pathlib import Path
 from typing import Optional, List
 from datetime import datetime
@@ -253,6 +254,11 @@ async def process_subtitles(
         
         if not transcript:
             raise ValueError("Không nhận diện được lời thoại trong video")
+        
+        # Nếu source_lang="auto", lấy ngôn ngữ Whisper đã detect
+        if source_lang == "auto" and sync.detected_language:
+            source_lang = sync.detected_language
+            logger.info(f"Auto-detected source language: {source_lang}")
         
         # 3. Tạo aligned subtitles từ transcript
         aligned_source = [
@@ -510,6 +516,11 @@ async def process_subtitles_from_text(
             # Dùng Whisper transcribe để lấy timing
             transcript = sync.transcribe(audio_path, source_lang)
             update_job(job_id, progress=55)
+            
+            # Nếu source_lang="auto", lấy ngôn ngữ Whisper đã detect
+            if source_lang == "auto" and sync.detected_language:
+                source_lang = sync.detected_language
+                logger.info(f"Auto-detected source language: {source_lang}")
             
             # Căn timing phụ đề theo transcript
             aligned_source = sync.align_subtitles(subtitle_lines, transcript)
@@ -901,6 +912,153 @@ async def add_packshot(
                 completed_at=datetime.now().isoformat()
             )
         except Exception as e:
+            update_job(job_id, status="failed", error=str(e))
+    
+    background_tasks.add_task(process)
+    return {"job_id": job_id, "message": "Processing started"}
+
+
+@app.post("/api/master/extract-frame")
+async def master_extract_frame(
+    video: UploadFile = File(...),
+    time_seconds: float = Form(0.0),
+):
+    """
+    Trích 1 frame từ video để user chọn object (SAM 3).
+    
+    - **video**: File video gốc
+    - **time_seconds**: Thời điểm cần trích frame (giây)
+    
+    Returns:
+        JSON gồm:
+        - video_path: Đường dẫn video đã lưu (server)
+        - frame_path: Đường dẫn frame JPEG (server)
+        - frame_base64: data URL để hiển thị trực tiếp trên frontend
+    """
+    # Lưu video upload
+    video_path = save_upload(video, "video_master_")
+    
+    try:
+        from src.mastering.object_segmenter import ObjectSegmenter
+        
+        segmenter = ObjectSegmenter(str(OUTPUT_DIR))
+        frame_path = segmenter.extract_frame(str(video_path), time_seconds)
+        
+        # Encode frame -> base64 để frontend hiển thị
+        with open(frame_path, "rb") as f:
+            frame_bytes = f.read()
+        frame_b64 = base64.b64encode(frame_bytes).decode("ascii")
+        data_url = f"data:image/jpeg;base64,{frame_b64}"
+        
+        return {
+            "video_path": str(video_path),
+            "frame_path": str(frame_path),
+            "frame_data_url": data_url,
+        }
+    except Exception as e:
+        logger.error(f"Master extract-frame failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/master/segment")
+async def master_segment_object(
+    frame_path: str = Form(...),
+    mode: str = Form("point"),
+    click_x: float | None = Form(None),
+    click_y: float | None = Form(None),
+    x1: float | None = Form(None),
+    y1: float | None = Form(None),
+    x2: float | None = Form(None),
+    y2: float | None = Form(None),
+):
+    """
+    Tạo mask object từ 1 click hoặc 1 bounding box trên frame (SAM 2).
+    
+    Args:
+        frame_path: Đường dẫn frame JPEG (từ /api/master/extract-frame)
+        mode: "point" (default) hoặc "box"
+        click_x, click_y: Toạ độ pixel (frame gốc) khi mode=point
+        x1, y1, x2, y2: Toạ độ bbox (frame gốc) khi mode=box
+    
+    Returns:
+        - mask_path: Đường dẫn mask PNG (server)
+        - mask_data_url: data URL để frontend overlay preview
+    """
+    try:
+        from src.mastering.object_segmenter import ObjectSegmenter
+        
+        segmenter = ObjectSegmenter(str(OUTPUT_DIR))
+        if mode == "box" and None not in (x1, y1, x2, y2):
+            mask_path = segmenter.segment_by_box(frame_path, x1, y1, x2, y2)
+        elif mode == "point" and click_x is not None and click_y is not None:
+            mask_path = segmenter.segment_by_click(frame_path, click_x, click_y)
+        else:
+            raise HTTPException(status_code=400, detail="Thiếu tham số segmentation (point hoặc box)")
+        
+        with open(mask_path, "rb") as f:
+            mask_bytes = f.read()
+        mask_b64 = base64.b64encode(mask_bytes).decode("ascii")
+        data_url = f"data:image/png;base64,{mask_b64}"
+        
+        return {
+            "mask_path": str(mask_path),
+            "mask_data_url": data_url,
+        }
+    except Exception as e:
+        logger.error(f"Master segment failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/master/edit-object")
+async def master_edit_object(
+    background_tasks: BackgroundTasks,
+    video_path: str = Form(...),
+    mask_path: str = Form(...),
+    action: str = Form("remove"),
+    prompt: str = Form(""),
+):
+    """
+    Xoá/thay object khỏi video bằng VEO 2.
+    
+    Frontend flow:
+    1) /api/master/extract-frame -> video_path, frame_path, frame_data_url
+    2) /api/master/segment -> mask_path, mask_data_url
+    3) /api/master/edit-object -> job_id (processing VEO 2)
+    """
+    job_id = uuid.uuid4().hex
+    jobs[job_id] = JobStatus(
+        job_id=job_id,
+        status="pending",
+        created_at=datetime.now().isoformat()
+    )
+    
+    async def process():
+        try:
+            update_job(job_id, status="processing", progress=10)
+            
+            # Hien tai chi ho tro remove, replace se dung cung pipeline nhung prompt khac
+            if action not in ("remove", "replace"):
+                raise ValueError(f"Unsupported action: {action}")
+            
+            from src.mastering.veo_editor import VeoEditor
+            
+            editor = VeoEditor(output_dir=str(OUTPUT_DIR))
+            # prompt duoc log lai ben trong VeoEditor, VEO remove-object khong bat buoc
+            output_path = editor.remove_object_full(
+                video_path=video_path,
+                mask_path=mask_path,
+                prompt=prompt or (f"{action} object"),
+            )
+            
+            update_job(
+                job_id,
+                status="completed",
+                progress=100,
+                result_path=output_path,
+                completed_at=datetime.now().isoformat()
+            )
+        except Exception as e:
+            logger.error(f"Master edit-object failed: {e}")
             update_job(job_id, status="failed", error=str(e))
     
     background_tasks.add_task(process)
