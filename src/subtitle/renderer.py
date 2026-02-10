@@ -213,12 +213,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         if output_path is None:
             output_path = self.output_dir / f"{video_path.stem}_subtitled{video_path.suffix}"
         
-        # Tạo file phụ đề tạm
+        # Tạo file phụ đề tạm trong output_dir (cùng ổ đĩa với project)
+        # để tránh vấn đề drive letter (C: vs D:) khi dùng relative path cho FFmpeg
         with tempfile.NamedTemporaryFile(
             mode='w', 
             suffix='.ass' if use_ass else '.srt',
             delete=False,
-            encoding='utf-8'
+            encoding='utf-8',
+            dir=str(self.output_dir)
         ) as tmp_file:
             if use_ass:
                 self.create_ass_file(subtitles, tmp_file.name, font_config, vf)
@@ -227,17 +229,26 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             subtitle_file = tmp_file.name
         
         try:
+            # Chuyển sang relative path + forward slash cho FFmpeg filter
+            # FFmpeg filter parser coi '\' là escape char và ':' là separator
+            # Dùng relative path để tránh drive letter 'C:' trên Windows
+            try:
+                ffmpeg_sub_path = os.path.relpath(subtitle_file).replace('\\', '/')
+            except ValueError:
+                # Fallback nếu khác ổ đĩa
+                ffmpeg_sub_path = subtitle_file.replace('\\', '/')
+            
             # Build FFmpeg command
             if use_ass:
                 # ASS có styling, dùng filter ass
-                subtitle_filter = f"ass='{subtitle_file}'"
+                subtitle_filter = f"ass={ffmpeg_sub_path}"
             else:
                 # SRT dùng subtitles filter với force_style
                 font_opts = self.font_manager.get_ffmpeg_font_options(language, vf.name)
                 style = f"FontName={font_opts['fontname']},FontSize={font_opts['fontsize']}"
                 style += f",PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000"
                 style += f",BorderStyle=1,Outline={font_opts['borderw']}"
-                subtitle_filter = f"subtitles='{subtitle_file}':force_style='{style}'"
+                subtitle_filter = f"subtitles={ffmpeg_sub_path}:force_style='{style}'"
             
             cmd = [
                 "ffmpeg", "-y",

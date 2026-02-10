@@ -4,6 +4,7 @@ Sử dụng Whisper AI để canh timing phụ đề theo lời thoại
 """
 import os
 import logging
+import tempfile
 from pathlib import Path
 from typing import List, Optional, Tuple
 from dataclasses import dataclass
@@ -106,24 +107,74 @@ class TimingSync:
                 file=audio_file,
                 language=language,
                 response_format="verbose_json",
-                timestamp_granularities=["segment"]
+                timestamp_granularities=["word", "segment"]
             )
         
+        # Xây dựng word-level timing map để refine segment timing
+        word_timings = []
+        if hasattr(response, 'words') and response.words:
+            for w in response.words:
+                if isinstance(w, dict):
+                    word_timings.append({
+                        "word": w.get("word", ""),
+                        "start": w.get("start", 0.0),
+                        "end": w.get("end", 0.0)
+                    })
+                else:
+                    word_timings.append({
+                        "word": getattr(w, "word", ""),
+                        "start": getattr(w, "start", 0.0),
+                        "end": getattr(w, "end", 0.0)
+                    })
+        
         segments = []
+        word_idx = 0
+        
         for seg in response.segments:
             # Handle both object and dict access (OpenAI API version differences)
             if isinstance(seg, dict):
-                start = seg.get("start", 0.0)
-                end = seg.get("end", 0.0)
+                seg_start = seg.get("start", 0.0)
+                seg_end = seg.get("end", 0.0)
                 text = seg.get("text", "").strip()
             else:
-                start = getattr(seg, "start", 0.0)
-                end = getattr(seg, "end", 0.0)
+                seg_start = getattr(seg, "start", 0.0)
+                seg_end = getattr(seg, "end", 0.0)
                 text = getattr(seg, "text", "").strip()
+            
+            # Dùng word-level timestamps để lấy thời điểm từ đầu tiên thực sự nói
+            # (segment start thường sớm hơn vì bao gồm khoảng lặng trước lời nói)
+            refined_start = seg_start
+            refined_end = seg_end
+            
+            if word_timings and word_idx < len(word_timings):
+                # Tìm từ đầu tiên thuộc segment này
+                while word_idx < len(word_timings):
+                    wt = word_timings[word_idx]
+                    if wt["start"] >= seg_start - 0.1:
+                        # Từ đầu tiên của segment → dùng start của nó (chính xác hơn)
+                        refined_start = wt["start"]
+                        break
+                    word_idx += 1
                 
+                # Tìm từ cuối cùng thuộc segment này
+                last_word_end = refined_end
+                temp_idx = word_idx
+                while temp_idx < len(word_timings):
+                    wt = word_timings[temp_idx]
+                    if wt["start"] > seg_end + 0.1:
+                        break
+                    last_word_end = wt["end"]
+                    temp_idx += 1
+                refined_end = last_word_end
+                
+                # Di chuyển word_idx tới segment tiếp theo
+                word_idx = temp_idx
+            
+            logger.info(f"Segment timing: [{seg_start:.2f}s -> {refined_start:.2f}s] ~ [{seg_end:.2f}s -> {refined_end:.2f}s]: {text[:50]}")
+            
             segments.append(TranscriptSegment(
-                start=start,
-                end=end,
+                start=refined_start,
+                end=refined_end,
                 text=text
             ))
         
@@ -576,7 +627,7 @@ def extract_audio(video_path: str, output_path: Optional[str] = None) -> str:
     
     if output_path is None:
         video_name = Path(video_path).stem
-        output_path = f"/tmp/{video_name}_audio.wav"
+        output_path = os.path.join(tempfile.gettempdir(), f"{video_name}_audio.wav")
     
     cmd = [
         "ffmpeg", "-y",
