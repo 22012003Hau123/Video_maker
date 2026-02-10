@@ -111,10 +111,20 @@ class TimingSync:
         
         segments = []
         for seg in response.segments:
+            # Handle both object and dict access (OpenAI API version differences)
+            if isinstance(seg, dict):
+                start = seg.get("start", 0.0)
+                end = seg.get("end", 0.0)
+                text = seg.get("text", "").strip()
+            else:
+                start = getattr(seg, "start", 0.0)
+                end = getattr(seg, "end", 0.0)
+                text = getattr(seg, "text", "").strip()
+                
             segments.append(TranscriptSegment(
-                start=seg.start,
-                end=seg.end,
-                text=seg.text.strip()
+                start=start,
+                end=end,
+                text=text
             ))
         
         return segments
