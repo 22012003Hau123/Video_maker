@@ -63,7 +63,6 @@ class LegalOverlay:
         media_type: MediaType = MediaType.SOCIAL,
         usage_type: UsageType = UsageType.SHAREABLE,
         output_path: Optional[str] = None,
-        output_path: Optional[str] = None,
         auto_detect_position: bool = True,
         product_type: Optional[str] = None,
         manual_position: Optional[str] = None

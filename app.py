@@ -49,11 +49,19 @@ templates = Jinja2Templates(directory=str(templates_dir)) if templates_dir.exist
 
 # ============ Models ============
 
+class ResultFile(BaseModel):
+    path: str
+    language: str
+    type: str  # "video" or "srt"
+    label: str  # e.g. "English - Video", "Vietnamese - SRT"
+
+
 class JobStatus(BaseModel):
     job_id: str
     status: str  # pending, processing, completed, failed
     progress: int = 0
     result_path: Optional[str] = None
+    result_files: List[ResultFile] = []
     error: Optional[str] = None
     created_at: str
     completed_at: Optional[str] = None
@@ -120,76 +128,157 @@ def save_upload(file: UploadFile, prefix: str = "") -> Path:
 
 # ============ Background Tasks ============
 
+LANG_NAMES = {
+    "en": "English", "vi": "Vietnamese", "fr": "French",
+    "zh": "Chinese", "ja": "Japanese", "ko": "Korean",
+    "de": "German", "es": "Spanish", "pt": "Portuguese",
+    "it": "Italian", "th": "Thai", "id": "Indonesian"
+}
+
+
+def translate_subtitles_gpt(aligned, source_lang, target_lang):
+    """Dịch phụ đề sang ngôn ngữ khác bằng GPT"""
+    from openai import OpenAI
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    
+    texts = [text for _, _, text in aligned]
+    joined = "\n---\n".join(texts)
+    
+    src_name = LANG_NAMES.get(source_lang, source_lang)
+    tgt_name = LANG_NAMES.get(target_lang, target_lang)
+    
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": f"Translate the following subtitles from {src_name} to {tgt_name}. Keep the same number of segments separated by ---. Only return the translated text, nothing else."},
+            {"role": "user", "content": joined}
+        ],
+        temperature=0.3
+    )
+    
+    translated_texts = response.choices[0].message.content.strip().split("\n---\n")
+    
+    # Pad or trim to match original count
+    while len(translated_texts) < len(aligned):
+        translated_texts.append("")
+    translated_texts = translated_texts[:len(aligned)]
+    
+    return [
+        (start, end, text.strip())
+        for (start, end, _), text in zip(aligned, translated_texts)
+    ]
+
+
+def generate_srt(aligned, output_path):
+    """Tạo file SRT từ aligned subtitles"""
+    def fmt(seconds):
+        h = int(seconds // 3600)
+        m = int((seconds % 3600) // 60)
+        s = int(seconds % 60)
+        ms = int((seconds % 1) * 1000)
+        return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+    
+    with open(output_path, "w", encoding="utf-8") as f:
+        for i, (start, end, text) in enumerate(aligned, 1):
+            f.write(f"{i}\n{fmt(start)} --> {fmt(end)}\n{text}\n\n")
+    return output_path
+
+
 async def process_subtitles(
     job_id: str,
     video_path: str,
-    excel_path: str,
-    language: str,
-    video_format: str
+    source_lang: str,
+    target_langs: List[str],
+    video_format: str,
+    export_video: bool = True,
+    export_srt: bool = True
 ):
-    """Background task để xử lý phụ đề - luôn dùng AI canh timing"""
+    """Background task để xử lý phụ đề đa ngôn ngữ"""
     try:
-        update_job(job_id, status="processing", progress=10)
+        update_job(job_id, status="processing", progress=5)
         
-        from src.subtitle.excel_reader import ExcelReader
         from src.subtitle.renderer import SubtitleRenderer
         from src.subtitle.timing_sync import TimingSync, extract_audio
         
-        # Read Excel - chỉ cần cột text
-        reader = ExcelReader(excel_path)
-        subtitles_data = reader.parse()
-        update_job(job_id, progress=20)
-        
-        if not subtitles_data:
-            raise ValueError("Không tìm thấy phụ đề trong file Excel")
-        
-        # Luôn dùng AI để canh timing
-        update_job(job_id, progress=30)
         sync = TimingSync()
+        result_files = []
         
-        try:
-            # Trích xuất audio từ video
-            audio_path = extract_audio(video_path)
-            update_job(job_id, progress=40)
-            
-            # Dùng Whisper transcribe để lấy timing
-            transcript = sync.transcribe(audio_path, language)
-            update_job(job_id, progress=60)
-            
-            # Căn timing phụ đề theo transcript
-            subtitle_texts = [s.text for s in subtitles_data]
-            aligned = sync.align_subtitles(subtitle_texts, transcript)
-            
-            # Áp dụng ngắt dòng thông minh
-            aligned = [
-                (start, end, sync.smart_line_break(text))
-                for start, end, text in aligned
-            ]
-            
-        except Exception as e:
-            logger.warning(f"AI timing failed: {e}, using fallback")
-            # Fallback: chia đều 3 giây mỗi phụ đề
-            aligned = [
-                (i * 3, (i + 1) * 3, s.text)
-                for i, s in enumerate(subtitles_data)
-            ]
+        # 1. Trích xuất audio
+        update_job(job_id, progress=10)
+        audio_path = extract_audio(video_path)
         
-        update_job(job_id, progress=70)
+        # 2. Whisper transcribe
+        update_job(job_id, progress=20)
+        transcript = sync.transcribe(audio_path, source_lang)
         
-        # Render
+        if not transcript:
+            raise ValueError("Không nhận diện được lời thoại trong video")
+        
+        # 3. Tạo aligned subtitles từ transcript
+        aligned_source = [
+            (seg.start, seg.end, sync.smart_line_break(seg.text))
+            for seg in transcript
+        ]
+        
+        update_job(job_id, progress=30)
+        
+        # 4. Xử lý từng ngôn ngữ
+        total_langs = len(target_langs)
         renderer = SubtitleRenderer(str(OUTPUT_DIR))
-        output_path = renderer.render(
-            video_path,
-            aligned,
-            language=language,
-            video_format=video_format
-        )
+        
+        for i, lang in enumerate(target_langs):
+            lang_name = LANG_NAMES.get(lang, lang)
+            progress = 30 + int((i / total_langs) * 60)
+            update_job(job_id, progress=progress)
+            
+            # Dịch nếu khác ngôn ngữ gốc
+            if lang == source_lang:
+                aligned = aligned_source
+            else:
+                try:
+                    aligned = translate_subtitles_gpt(aligned_source, source_lang, lang)
+                except Exception as e:
+                    logger.warning(f"Translation to {lang} failed: {e}")
+                    continue
+            
+            # Export video với phụ đề
+            if export_video:
+                try:
+                    output_path = renderer.render(
+                        video_path,
+                        aligned,
+                        language=lang,
+                        video_format=video_format
+                    )
+                    result_files.append(ResultFile(
+                        path=output_path,
+                        language=lang,
+                        type="video",
+                        label=f"{lang_name} - Video"
+                    ))
+                except Exception as e:
+                    logger.warning(f"Render {lang} video failed: {e}")
+            
+            # Export SRT
+            if export_srt:
+                srt_path = str(OUTPUT_DIR / f"subtitle_{job_id}_{lang}.srt")
+                generate_srt(aligned, srt_path)
+                result_files.append(ResultFile(
+                    path=srt_path,
+                    language=lang,
+                    type="srt",
+                    label=f"{lang_name} - SRT"
+                ))
+        
+        if not result_files:
+            raise ValueError("Không tạo được output nào")
         
         update_job(
             job_id,
             status="completed",
             progress=100,
-            result_path=output_path,
+            result_path=result_files[0].path,
+            result_files=result_files,
             completed_at=datetime.now().isoformat()
         )
         
@@ -284,25 +373,26 @@ async def health_check():
 async def add_subtitle(
     background_tasks: BackgroundTasks,
     video: UploadFile = File(...),
-    excel: Optional[UploadFile] = File(None),
-    language: str = Form("vi"),
-    video_format: str = Form("16x9")
+    source_language: str = Form("en"),
+    video_format: str = Form("16x9"),
+    target_languages: str = Form("en"),
+    export_video: bool = Form(True),
+    export_srt: bool = Form(True)
 ):
     """
-    Thêm phụ đề vào video từ file Excel
-    
-    - **video**: File video (mp4, mov, etc.)
-    - **excel**: File Excel chứa phụ đề (chỉ cần cột text)
-    - **language**: Mã ngôn ngữ (vi, en, ja, etc.)
-    - **video_format**: Định dạng video (16x9, 9x16, 1x1, 4x5)
-    
-    AI tự động canh timing theo lời thoại trong video.
+    Thêm phụ đề đa ngôn ngữ vào video bằng AI
     """
-    # Save uploads
-    video_path = save_upload(video, "video_")
-    excel_path = save_upload(excel, "excel_")
+    logger.info(f"Received add_subtitle request: source={source_language}, targets={target_languages}, export_video={export_video}, export_srt={export_srt}")
     
-    # Create job
+    video_path = save_upload(video, "video_")
+    
+    # Parse target languages
+    langs = [l.strip() for l in target_languages.split(",") if l.strip()]
+    if not langs:
+        langs = [source_language]
+    
+    logger.info(f"Parsed languages: {langs}")
+    
     job_id = uuid.uuid4().hex
     jobs[job_id] = JobStatus(
         job_id=job_id,
@@ -310,35 +400,44 @@ async def add_subtitle(
         created_at=datetime.now().isoformat()
     )
     
-    # Start background processing
     background_tasks.add_task(
         process_subtitles,
         job_id,
         str(video_path),
-        str(excel_path),
-        language,
-        video_format
+        source_language,
+        langs,
+        video_format,
+        export_video,
+        export_srt
     )
     
-    return {"job_id": job_id, "message": "Processing started - AI đang canh timing"}
+    lang_names = [LANG_NAMES.get(l, l) for l in langs]
+    return {"job_id": job_id, "message": f"AI đang tạo phụ đề: {', '.join(lang_names)}"}
 
 
 async def process_subtitles_from_text(
     job_id: str,
     video_path: str,
     subtitle_lines: Optional[List[str]],
-    language: str,
+    source_lang: str,
+    target_langs: List[str],
     video_format: str,
+    export_video: bool = True,
+    export_srt: bool = True,
     raw_text: Optional[str] = None
 ):
-    """Background task để xử lý phụ đề từ text trực tiếp"""
+    """Background task để xử lý phụ đề từ text trực tiếp (đa ngôn ngữ)"""
     try:
+        logger.info(f"Starting process_subtitles_from_text for job {job_id}")
+        logger.info(f"Source: {source_lang}, Targets: {target_langs}")
+        
         update_job(job_id, status="processing", progress=5)
         
         from src.subtitle.renderer import SubtitleRenderer
         from src.subtitle.timing_sync import TimingSync, extract_audio
         
         sync = TimingSync()
+        result_files = []
         
         # Nếu có raw_text (1 đoạn dài), dùng AI ngắt câu trước
         if raw_text and not subtitle_lines:
@@ -347,7 +446,7 @@ async def process_subtitles_from_text(
             
             subtitle_lines = sync.segment_long_text(
                 raw_text,
-                language=language,
+                language=source_lang,
                 max_chars=80,
                 use_ai=True
             )
@@ -364,42 +463,93 @@ async def process_subtitles_from_text(
             update_job(job_id, progress=35)
             
             # Dùng Whisper transcribe để lấy timing
-            transcript = sync.transcribe(audio_path, language)
+            transcript = sync.transcribe(audio_path, source_lang)
             update_job(job_id, progress=55)
             
             # Căn timing phụ đề theo transcript
-            aligned = sync.align_subtitles(subtitle_lines, transcript)
+            aligned_source = sync.align_subtitles(subtitle_lines, transcript)
             
             # Áp dụng ngắt dòng thông minh cho mỗi segment
-            aligned = [
+            aligned_source = [
                 (start, end, sync.smart_line_break(text))
-                for start, end, text in aligned
+                for start, end, text in aligned_source
             ]
             
         except Exception as e:
             logger.warning(f"AI timing failed: {e}, using fallback")
             # Fallback: chia đều 3 giây mỗi phụ đề
-            aligned = [
+            aligned_source = [
                 (i * 3, (i + 1) * 3, text)
                 for i, text in enumerate(subtitle_lines)
             ]
         
         update_job(job_id, progress=70)
         
-        # Render
+        # 4. Xử lý từng ngôn ngữ (tương tự như process_subtitles)
+        total_langs = len(target_langs)
         renderer = SubtitleRenderer(str(OUTPUT_DIR))
-        output_path = renderer.render(
-            video_path,
-            aligned,
-            language=language,
-            video_format=video_format
-        )
+        
+        for i, lang in enumerate(target_langs):
+            lang_name = LANG_NAMES.get(lang, lang)
+            progress = 70 + int((i / total_langs) * 20)
+            update_job(job_id, progress=progress)
+            
+            # Dịch nếu khác ngôn ngữ gốc
+            if lang == source_lang:
+                aligned = aligned_source
+            else:
+                try:
+                    logger.info(f"Translating subtitles from {source_lang} to {lang}...")
+                    aligned = translate_subtitles_gpt(aligned_source, source_lang, lang)
+                    logger.info(f"Translation to {lang} completed.")
+                except Exception as e:
+                    logger.warning(f"Translation to {lang} failed: {e}")
+                    continue
+            
+            # Export video với phụ đề
+            if export_video:
+                try:
+                    logger.info(f"Rendering video for {lang}...")
+                    output_path = renderer.render(
+                        video_path,
+                        aligned,
+                        language=lang,
+                        video_format=video_format
+                    )
+                    result_files.append(ResultFile(
+                        path=output_path,
+                        language=lang,
+                        type="video",
+                        label=f"{lang_name} - Video"
+                    ))
+                    logger.info(f"Rendered video for {lang} saved to {output_path}")
+                except Exception as e:
+                    logger.warning(f"Render {lang} video failed: {e}")
+            
+            # Export SRT
+            if export_srt:
+                try:
+                    srt_path = str(OUTPUT_DIR / f"subtitle_{job_id}_{lang}.srt")
+                    generate_srt(aligned, srt_path)
+                    result_files.append(ResultFile(
+                        path=srt_path,
+                        language=lang,
+                        type="srt",
+                        label=f"{lang_name} - SRT"
+                    ))
+                    logger.info(f"Generated SRT for {lang} saved to {srt_path}")
+                except Exception as e:
+                    logger.warning(f"Generate {lang} SRT failed: {e}")
+        
+        if not result_files:
+            raise ValueError("Không tạo được output nào")
         
         update_job(
             job_id,
             status="completed",
             progress=100,
-            result_path=output_path,
+            result_path=result_files[0].path,
+            result_files=result_files,
             completed_at=datetime.now().isoformat()
         )
         
@@ -413,27 +563,27 @@ async def add_subtitle_from_text(
     background_tasks: BackgroundTasks,
     video: UploadFile = File(...),
     subtitle_text: str = Form(...),
-    language: str = Form("vi"),
+    source_language: str = Form("en"),
     video_format: str = Form("16x9"),
+    target_languages: str = Form("en"),
+    export_video: bool = Form(True),
+    export_srt: bool = Form(True),
     auto_segment: bool = Form(True)
 ):
     """
-    Thêm phụ đề vào video từ text nhập trực tiếp
-    
-    - **video**: File video (mp4, mov, etc.)
-    - **subtitle_text**: Text phụ đề (có thể là 1 đoạn dài hoặc mỗi dòng 1 câu)
-    - **language**: Mã ngôn ngữ (vi, en, ja, etc.)
-    - **video_format**: Định dạng video (16x9, 9x16, 1x1, 4x5)
-    - **auto_segment**: Tự động ngắt câu dài thành các đoạn phụ đề (mặc định: True)
-    
-    AI tự động:
-    - Ngắt câu dài thành các đoạn phụ đề phù hợp
-    - Canh timing theo lời thoại trong video
+    Thêm phụ đề vào video từ text nhập trực tiếp (đa ngôn ngữ)
     """
+    logger.info(f"Received add_subtitle_from_text request: source={source_language}, targets={target_languages}")
+
     text = subtitle_text.strip()
     
     if not text:
         raise HTTPException(status_code=400, detail="Không có phụ đề nào được nhập")
+    
+    # Parse target languages
+    langs = [l.strip() for l in target_languages.split(",") if l.strip()]
+    if not langs:
+        langs = [source_language]
     
     # Kiểm tra nếu là nhiều dòng hay 1 đoạn dài
     lines = [l.strip() for l in text.split('\n') if l.strip()]
@@ -458,21 +608,24 @@ async def add_subtitle_from_text(
         created_at=datetime.now().isoformat()
     )
     
-    # Start background processing
     background_tasks.add_task(
         process_subtitles_from_text,
         job_id,
         str(video_path),
         subtitle_lines,
-        language,
+        source_language,
+        langs,
         video_format,
+        export_video,
+        export_srt,
         raw_text  # Pass raw text for AI segmentation
     )
     
+    lang_names = [LANG_NAMES.get(l, l) for l in langs]
     if raw_text:
-        return {"job_id": job_id, "message": "AI đang ngắt câu và canh timing..."}
+        return {"job_id": job_id, "message": f"AI đang ngắt câu, canh timing và dịch sang: {', '.join(lang_names)}"}
     else:
-        return {"job_id": job_id, "message": f"Processing {len(subtitle_lines)} dòng phụ đề - AI đang canh timing"}
+        return {"job_id": job_id, "message": f"Processing {len(subtitle_lines)} dòng phụ đề và dịch sang: {', '.join(lang_names)}"}
 
 
 @app.post("/api/legal")
@@ -1010,7 +1163,7 @@ async def get_job_status(job_id: str):
 
 @app.get("/api/download/{job_id}")
 async def download_result(job_id: str):
-    """Download kết quả xử lý"""
+    """Download kết quả xử lý (file đầu tiên)"""
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -1021,10 +1174,40 @@ async def download_result(job_id: str):
     if not job.result_path or not Path(job.result_path).exists():
         raise HTTPException(status_code=404, detail="Result file not found")
     
+    ext = Path(job.result_path).suffix.lower()
+    media_types = {".mp4": "video/mp4", ".srt": "text/plain", ".zip": "application/zip"}
+    
     return FileResponse(
         job.result_path,
         filename=Path(job.result_path).name,
-        media_type="video/mp4"
+        media_type=media_types.get(ext, "application/octet-stream")
+    )
+
+
+@app.get("/api/download/{job_id}/{file_index}")
+async def download_result_file(job_id: str, file_index: int):
+    """Download file cụ thể từ job (theo index)"""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    if job.status != "completed":
+        raise HTTPException(status_code=400, detail=f"Job status: {job.status}")
+    
+    if file_index < 0 or file_index >= len(job.result_files):
+        raise HTTPException(status_code=404, detail="File index out of range")
+    
+    rf = job.result_files[file_index]
+    if not Path(rf.path).exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    ext = Path(rf.path).suffix.lower()
+    media_types = {".mp4": "video/mp4", ".srt": "text/plain"}
+    
+    return FileResponse(
+        rf.path,
+        filename=Path(rf.path).name,
+        media_type=media_types.get(ext, "application/octet-stream")
     )
 
 

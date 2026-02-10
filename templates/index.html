@@ -737,6 +737,17 @@ Craft. Time. And a story worth savoring."></textarea>
             const form = e.target;
             const formData = new FormData(form);
             
+            // 1. Handle Target Languages
+            const selectedLangs = [];
+            form.querySelectorAll('input[name^="lang_"]:checked').forEach(cb => {
+                selectedLangs.push(cb.value);
+            });
+            formData.set('target_languages', selectedLangs.join(','));
+            
+            // 2. Handle Export Flags
+            formData.set('export_video', form.querySelector('input[name="export_video"]').checked);
+            formData.set('export_srt', form.querySelector('input[name="export_srt"]').checked);
+            
             // Determine endpoint based on input mode
             let endpoint = '/api/subtitle';
             
@@ -746,7 +757,6 @@ Craft. Time. And a story worth savoring."></textarea>
                     alert('Please enter subtitles!');
                     return;
                 }
-                formData.delete('excel');
                 formData.set('subtitle_text', subtitleText);
                 endpoint = '/api/subtitle-text';
             }
@@ -766,6 +776,7 @@ Craft. Time. And a story worth savoring."></textarea>
                 }
             } catch (error) {
                 alert('Error: ' + error.message);
+                document.getElementById('subtitle-submit').disabled = false;
             }
         }
         
@@ -957,37 +968,71 @@ Craft. Time. And a story worth savoring."></textarea>
             const statusBox = document.getElementById(statusBoxId);
             
             const poll = async () => {
-                const response = await fetch('/api/jobs/' + jobId);
-                const job = await response.json();
-                            statusBox.innerHTML = `
-                    <h3>Processing Status</h3>
-                    <div class="progress-bar">
-                        <div class="fill" style="width: ${job.progress}%"></div>
-                    </div>
-                    <div class="status-text">
-                        <span class="status-label ${job.status === 'completed' ? 'status-completed' : ''} ${job.status === 'failed' ? 'status-failed' : ''}">
-                            ${job.status === 'completed' ? '<i class="ph ph-check-circle"></i> Completed!' : job.status === 'failed' ? '<i class="ph ph-x-circle"></i> Error: ' + job.error : '<i class="ph ph-hourglass"></i> Processing...'}
-                        </span>
-                        <span class="status-percent">${job.progress}%</span>
-                    </div>
-                    ${job.status === 'completed' ? `
-                        <div style="margin-top: 1rem;">
-                            <video controls style="width: 100%; border-radius: 8px; margin-bottom: 1rem; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
-                                <source src="/api/download/${jobId}" type="video/mp4">
-                                Your browser does not support the video tag.
-                            </video>
-                            <a href="/api/download/${jobId}" class="btn download-btn">
-                                <i class="ph ph-download-simple"></i> Download Video
-                            </a>
+                try {
+                    const response = await fetch('/api/jobs/' + jobId);
+                    const job = await response.json();
+                    
+                    let html = `
+                        <h3>Processing Status</h3>
+                        <div class="progress-bar">
+                            <div class="fill" style="width: ${job.progress}%"></div>
                         </div>
-                    ` : ''}
-                `;
-                
-                if (job.status !== 'completed' && job.status !== 'failed') {
-                    setTimeout(poll, 2000);
-                } else {
-                    // Re-enable submit buttons
-                    document.querySelectorAll('button[type="submit"]').forEach(b => b.disabled = false);
+                        <div class="status-text">
+                            <span class="status-label ${job.status === 'completed' ? 'status-completed' : ''} ${job.status === 'failed' ? 'status-failed' : ''}">
+                                ${job.status === 'completed' ? '<i class="ph ph-check-circle"></i> Completed!' : job.status === 'failed' ? '<i class="ph ph-x-circle"></i> Error: ' + job.error : '<i class="ph ph-hourglass"></i> Processing...'}
+                            </span>
+                            <span class="status-percent">${job.progress}%</span>
+                        </div>
+                    `;
+                    
+                    if (job.status === 'completed') {
+                        html += '<div style="margin-top: 1.5rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">';
+                        
+                        const files = job.result_files || [{path: job.result_path, type: 'video', label: 'Download Result', language: 'en'}];
+                        
+                        files.forEach((file, index) => {
+                            // Use index-based download URL if available in new backend, else fallback
+                            // Since we updated backend to have /api/download/{job_id}/{index}, we use that.
+                            // For legacy (single file), we fallback to /api/download/{job_id}
+                            const downloadUrl = job.result_files ? `/api/download/${jobId}/${index}` : `/api/download/${jobId}`;
+                            
+                            html += `
+                                <div style="background: var(--surface-light); border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color);">
+                                    ${file.type === 'video' ? `
+                                        <video controls style="width: 100%; height: 160px; object-fit: cover; background: #000;">
+                                            <source src="${downloadUrl}" type="video/mp4">
+                                            Your browser does not support video.
+                                        </video>
+                                    ` : `
+                                        <div style="height: 160px; display: flex; align-items: center; justify-content: center; background: rgba(59, 130, 246, 0.05); color: var(--primary);">
+                                            <i class="ph ph-file-text" style="font-size: 3rem;"></i>
+                                        </div>
+                                    `}
+                                    <div style="padding: 1rem;">
+                                        <div style="font-weight: 600; margin-bottom: 0.5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${file.label || 'Result File'}</div>
+                                        <a href="${downloadUrl}" class="btn btn-sm" style="width: 100%; justify-content: center; background: var(--surface); border: 1px solid var(--border-color); color: var(--text);">
+                                            <i class="ph ph-download-simple"></i> Download
+                                        </a>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        
+                        html += '</div>';
+                        
+                        // Re-enable submit buttons
+                        document.querySelectorAll('button[type="submit"]').forEach(b => b.disabled = false);
+                    } else if (job.status === 'failed') {
+                         document.querySelectorAll('button[type="submit"]').forEach(b => b.disabled = false);
+                    }
+                    
+                    statusBox.innerHTML = html;
+                    
+                    if (job.status !== 'completed' && job.status !== 'failed') {
+                        setTimeout(poll, 2000);
+                    }
+                } catch (e) {
+                    console.error("Polling error", e);
                 }
             };
             
