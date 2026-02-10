@@ -44,6 +44,28 @@ templates_dir = Path(__file__).parent / "templates"
 if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
+# Cleanup Task
+@app.on_event("startup")
+async def schedule_periodic_cleanup():
+    """Schedule daily cleanup task"""
+    import asyncio
+    from src.utils.cleanup import cleanup_old_files
+    
+    async def cleanup_loop():
+        while True:
+            try:
+                logger.info("Running scheduled cleanup...")
+                # Cleanup files older than 24h
+                cleanup_old_files(UPLOAD_DIR, max_age_hours=24)
+                cleanup_old_files(OUTPUT_DIR, max_age_hours=24)
+            except Exception as e:
+                logger.error(f"Cleanup failed: {e}")
+            
+            # Wait for 24h (86400 seconds)
+            await asyncio.sleep(86400)
+    
+    asyncio.create_task(cleanup_loop())
+
 templates = Jinja2Templates(directory=str(templates_dir)) if templates_dir.exists() else None
 
 
@@ -122,6 +144,9 @@ def save_upload(file: UploadFile, prefix: str = "") -> Path:
     
     with open(filepath, "wb") as f:
         shutil.copyfileobj(file.file, f)
+        
+    file_size = os.path.getsize(filepath)
+    logger.info(f"Saved upload: {filepath} (Size: {file_size} bytes, Content-Type: {file.content_type}, Original: {file.filename})")
     
     return filepath
 
@@ -147,20 +172,35 @@ def translate_subtitles_gpt(aligned, source_lang, target_lang):
     src_name = LANG_NAMES.get(source_lang, source_lang)
     tgt_name = LANG_NAMES.get(target_lang, target_lang)
     
+    import re
+    
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": f"Translate the following subtitles from {src_name} to {tgt_name}. Keep the same number of segments separated by ---. Only return the translated text, nothing else."},
+            {"role": "system", "content": f"Translate these subtitles from {src_name} to {tgt_name}. Maintain the exact number of lines. Use '---' as a separator between each line. Do not add numbering or extra text."},
             {"role": "user", "content": joined}
         ],
         temperature=0.3
     )
     
-    translated_texts = response.choices[0].message.content.strip().split("\n---\n")
+    content = response.choices[0].message.content.strip()
+    
+    # Robust splitting using regex to handle variations like " \n---\n ", " --- ", etc.
+    translated_texts = re.split(r'\s*---\s*', content)
+    
+    # Remove empty strings from split result (e.g. at start/end) if needed, but keep empty translations
+    # However, re.split might produce empty if '---' is at start/end.
+    # We trust GPT generally but let's be safe.
+    if translated_texts and not translated_texts[0]:
+        translated_texts.pop(0)
+    if translated_texts and not translated_texts[-1]:
+        translated_texts.pop(-1)
     
     # Pad or trim to match original count
-    while len(translated_texts) < len(aligned):
-        translated_texts.append("")
+    if len(translated_texts) < len(aligned):
+        logger.warning(f"Translation count mismatch: got {len(translated_texts)}, expected {len(aligned)}")
+        while len(translated_texts) < len(aligned):
+            translated_texts.append("")
     translated_texts = translated_texts[:len(aligned)]
     
     return [
@@ -244,9 +284,14 @@ async def process_subtitles(
             # Export video với phụ đề
             if export_video:
                 try:
+                    # Tạo output path riêng cho từng ngôn ngữ để tránh overwrite
+                    output_filename = f"{Path(video_path).stem}_{lang}.mp4"
+                    output_path = str(OUTPUT_DIR / output_filename)
+                    
                     output_path = renderer.render(
                         video_path,
                         aligned,
+                        output_path,
                         language=lang,
                         video_format=video_format
                     )
@@ -510,9 +555,15 @@ async def process_subtitles_from_text(
             if export_video:
                 try:
                     logger.info(f"Rendering video for {lang}...")
+                    
+                    # Tạo output path riêng cho từng ngôn ngữ
+                    output_filename = f"{Path(video_path).stem}_{lang}.mp4"
+                    output_path = str(OUTPUT_DIR / output_filename)
+                    
                     output_path = renderer.render(
                         video_path,
                         aligned,
+                        output_path,
                         language=lang,
                         video_format=video_format
                     )

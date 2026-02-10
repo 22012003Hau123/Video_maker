@@ -243,7 +243,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 "ffmpeg", "-y",
                 "-i", str(video_path),
                 "-vf", subtitle_filter,
+                "-c:v", "libx264",
+                "-preset", "ultrafast",  # Optimize for speed
+                "-crf", "23",            # Maintain good quality
+                "-threads", "0",         # Use all available cores
                 "-c:a", "copy",
+                "-movflags", "+faststart", # Optimize for web playback
                 str(output_path)
             ]
             
