@@ -1,0 +1,46 @@
+# ============================================
+# Video Subtitles Automation - Docker Compose
+# ============================================
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: video-subtitles
+    restart: unless-stopped
+    ports:
+      - "8003:8000"
+    env_file:
+      - .env
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - DEBUG=False
+      - UPLOAD_DIR=/app/uploads
+      - OUTPUT_DIR=/app/outputs
+    volumes:
+      # Persist uploads and outputs
+      - uploads_data:/app/uploads
+      - outputs_data:/app/outputs
+      # Custom fonts (optional)
+      - ./data/fonts:/app/data/fonts:ro
+      # Legal templates (optional, for live updates)
+      - ./data/legal_templates:/app/data/legal_templates:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; r = httpx.get('http://localhost:8000/health'); r.raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
+
+volumes:
+  uploads_data:
+  outputs_data:

@@ -389,9 +389,7 @@
         <div class="logo">
             <i class="ph ph-film-slate"></i> Video Subtitles Automation
         </div>
-        <div>
-            <a href="/docs" style="color: white; text-decoration: none;"><i class="ph ph-book"></i> API Docs</a>
-        </div>
+
     </nav>
     
     <div class="container">
@@ -684,7 +682,6 @@ Craft. Time. And a story worth savoring."></textarea>
     </div>
     
     <footer class="footer">
-        Video Subtitles Automation © 2025 | Powered by AI
     </footer>
     
     <script>
@@ -904,15 +901,15 @@ Craft. Time. And a story worth savoring."></textarea>
                 if (response.ok) {
                     const blob = await response.blob();
                     const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'image_legal.jpg';
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    window.URL.revokeObjectURL(url);
-                    
-                    statusBox.innerHTML = '<i class="ph ph-check-circle"></i> Success! Image downloaded.';
+                    statusBox.innerHTML = `
+                        <div style="margin-top: 1rem; text-align: center;">
+                            <img src="${url}" style="max-width: 100%; max-height: 400px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); margin-bottom: 1rem;">
+                            <br>
+                            <a href="${url}" download="image_legal.jpg" class="btn download-btn">
+                                <i class="ph ph-download-simple"></i> Download Image
+                            </a>
+                        </div>
+                    `;
                 } else {
                     const error = await response.json();
                     statusBox.innerHTML = '<i class="ph ph-x-circle"></i> Error: ' + error.detail;
@@ -974,9 +971,15 @@ Craft. Time. And a story worth savoring."></textarea>
                         <span class="status-percent">${job.progress}%</span>
                     </div>
                     ${job.status === 'completed' ? `
-                        <a href="/api/download/${jobId}" class="btn download-btn">
-                            <i class="ph ph-download-simple"></i> Download Video
-                        </a>
+                        <div style="margin-top: 1rem;">
+                            <video controls style="width: 100%; border-radius: 8px; margin-bottom: 1rem; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+                                <source src="/api/download/${jobId}" type="video/mp4">
+                                Your browser does not support the video tag.
+                            </video>
+                            <a href="/api/download/${jobId}" class="btn download-btn">
+                                <i class="ph ph-download-simple"></i> Download Video
+                            </a>
+                        </div>
                     ` : ''}
                 `;
                 

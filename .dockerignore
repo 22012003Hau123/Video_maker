@@ -1,0 +1,49 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*.egg-info
+venv/
+.venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment (secrets - use env_file in compose instead)
+.env
+.env.local
+
+# Runtime data (mounted as volumes)
+uploads/
+outputs/
+
+# Large media files
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+
+# Temp & logs
+*.tmp
+*.temp
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tests
+tests/
+
+# Docker
+Dockerfile
+docker-compose.yml
