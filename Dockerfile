@@ -28,8 +28,11 @@ WORKDIR /app
 # Copy requirements first (for Docker cache optimization)
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+# Pin setuptools for packages that need pkg_resources (e.g. openai-whisper)
+RUN echo "setuptools<81" > /tmp/constraints.txt
+ENV PIP_CONSTRAINT=/tmp/constraints.txt
+
+RUN pip install --no-cache-dir --upgrade pip "setuptools<81" wheel && \
     pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
