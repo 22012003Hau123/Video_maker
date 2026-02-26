@@ -907,6 +907,415 @@ async def add_packshot(
     return {"job_id": job_id, "message": "Processing started"}
 
 
+# ============ Mastering AI (Scene Analysis, Smart Cut, Logo Removal, Inpainting) ============
+
+@app.post("/api/master/analyze-scenes")
+async def analyze_scenes(
+    background_tasks: BackgroundTasks,
+    video: UploadFile = File(...)
+):
+    """Phân tích scenes trong video bằng CLIP AI"""
+    video_path = save_upload(video, "video_")
+    
+    job_id = uuid.uuid4().hex
+    jobs[job_id] = JobStatus(
+        job_id=job_id,
+        status="pending",
+        created_at=datetime.now().isoformat()
+    )
+    
+    async def process():
+        try:
+            update_job(job_id, status="processing", progress=10)
+            
+            from src.mastering.scene_detection import SceneDetector
+            detector = SceneDetector(output_dir=str(OUTPUT_DIR / "scenes" / job_id))
+            
+            # Ensure video is compatible
+            compatible_path = detector.ensure_compatible_video(str(video_path))
+            update_job(job_id, progress=20)
+            
+            # Detect scenes
+            scenes = detector.detect_scenes(compatible_path)
+            update_job(job_id, progress=50)
+            
+            # Classify scenes with CLIP
+            detector.classify_scenes(scenes, video_path=compatible_path)
+            update_job(job_id, progress=90)
+            
+            # Build result
+            scene_data = []
+            for i, s in enumerate(scenes):
+                # Convert keyframe absolute path to a URL
+                kf_url = ""
+                if s.keyframe_path and os.path.exists(s.keyframe_path):
+                    kf_url = f"/api/master/keyframe/{job_id}/{i}"
+                
+                scene_info = {
+                    "index": i,
+                    "start_time": round(s.start_time, 2),
+                    "end_time": round(s.end_time, 2),
+                    "duration": round(s.end_time - s.start_time, 2),
+                    "scene_type": s.scene_type,
+                    "keyframe_url": kf_url,
+                }
+                scene_data.append(scene_info)
+            
+            # Store scenes in job for later use (smart cut, logo removal)
+            jobs[job_id]._scenes = scenes
+            jobs[job_id]._video_path = compatible_path
+            
+            update_job(
+                job_id,
+                status="completed",
+                progress=100,
+                result_path=str(OUTPUT_DIR / "scenes" / job_id),
+                completed_at=datetime.now().isoformat()
+            )
+            # Attach scene_data to job for retrieval
+            jobs[job_id]._scene_data = scene_data
+            
+        except Exception as e:
+            logger.error(f"Scene analysis failed: {e}")
+            import traceback
+            traceback.print_exc()
+            update_job(job_id, status="failed", error=str(e))
+    
+    background_tasks.add_task(process)
+    return {"job_id": job_id, "message": "Scene analysis started"}
+
+
+@app.get("/api/master/scene-results/{job_id}")
+async def get_scene_results(job_id: str):
+    """Lấy kết quả phân tích scene"""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    if job.status != "completed":
+        return {"status": job.status, "progress": job.progress, "error": job.error}
+    
+    scene_data = getattr(job, '_scene_data', [])
+    return {
+        "status": "completed",
+        "scenes": scene_data,
+        "total_scenes": len(scene_data),
+    }
+
+
+@app.get("/api/master/keyframe/{job_id}/{scene_index}")
+async def get_keyframe(job_id: str, scene_index: int):
+    """Serve keyframe image cho scene cụ thể"""
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    scenes = getattr(job, '_scenes', [])
+    if scene_index < 0 or scene_index >= len(scenes):
+        raise HTTPException(status_code=404, detail="Scene not found")
+    
+    keyframe_path = scenes[scene_index].keyframe_path
+    if not keyframe_path or not os.path.exists(keyframe_path):
+        raise HTTPException(status_code=404, detail="Keyframe not found")
+    
+    return FileResponse(keyframe_path, media_type="image/jpeg")
+
+
+@app.post("/api/master/smart-cut")
+async def smart_cut(
+    background_tasks: BackgroundTasks,
+    scene_job_id: str = Form(...),
+    remove_intro: bool = Form(True),
+    remove_outro: bool = Form(True),
+    remove_logo: bool = Form(False),
+    remove_product: bool = Form(False),
+):
+    """Smart cut dựa trên kết quả scene analysis"""
+    # Get scene analysis results
+    scene_job = get_job(scene_job_id)
+    if not scene_job or scene_job.status != "completed":
+        raise HTTPException(status_code=400, detail="Scene analysis job not completed")
+    
+    scenes = getattr(scene_job, '_scenes', None)
+    video_path = getattr(scene_job, '_video_path', None)
+    if not scenes or not video_path:
+        raise HTTPException(status_code=400, detail="Scene data not available")
+    
+    job_id = uuid.uuid4().hex
+    jobs[job_id] = JobStatus(
+        job_id=job_id,
+        status="pending",
+        created_at=datetime.now().isoformat()
+    )
+    
+    async def process():
+        try:
+            update_job(job_id, status="processing", progress=20)
+            
+            from src.mastering.smart_cut import SmartCutter
+            cutter = SmartCutter(output_dir=str(OUTPUT_DIR / "cuts"))
+            
+            # Generate cut list
+            keep_segments = cutter.generate_cut_list(
+                scenes,
+                remove_intro=remove_intro,
+                remove_outro=remove_outro,
+                remove_product=remove_product,
+                remove_logo=remove_logo,
+            )
+            update_job(job_id, progress=40)
+            
+            # Render video
+            output_filename = f"smartcut_{job_id}.mp4"
+            output_path = cutter.render_video(video_path, keep_segments, output_filename)
+            
+            update_job(
+                job_id,
+                status="completed",
+                progress=100,
+                result_path=output_path,
+                completed_at=datetime.now().isoformat()
+            )
+        except Exception as e:
+            logger.error(f"Smart cut failed: {e}")
+            import traceback
+            traceback.print_exc()
+            update_job(job_id, status="failed", error=str(e))
+    
+    background_tasks.add_task(process)
+    return {"job_id": job_id, "message": "Smart cut started"}
+
+
+@app.post("/api/master/logo-detect")
+async def logo_detect(
+    video: UploadFile = File(...)
+):
+    """Phát hiện logo trong video bằng Grounding DINO AI"""
+    video_path = save_upload(video, "video_")
+    
+    try:
+        from src.mastering.logo_removal import LogoRemovalService
+        service = LogoRemovalService(output_dir=str(OUTPUT_DIR / "logo_removal"))
+        
+        result = service.detect_logo_region(str(video_path))
+        
+        return result
+    except Exception as e:
+        logger.error(f"Logo detection failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/master/logo-remove")
+async def logo_auto_remove(
+    background_tasks: BackgroundTasks,
+    scene_job_id: str = Form(...),
+    mask: Optional[UploadFile] = File(None),
+):
+    """Tự động xóa logo bằng AI (Grounding DINO + LaMa inpainting)"""
+    scene_job = get_job(scene_job_id)
+    if not scene_job or scene_job.status != "completed":
+        raise HTTPException(status_code=400, detail="Scene analysis job not completed")
+    
+    scenes = getattr(scene_job, '_scenes', None)
+    video_path = getattr(scene_job, '_video_path', None)
+    if not scenes or not video_path:
+        raise HTTPException(status_code=400, detail="Scene data not available")
+    
+    mask_path = None
+    if mask:
+        mask_path = str(save_upload(mask, "mask_"))
+    
+    job_id = uuid.uuid4().hex
+    jobs[job_id] = JobStatus(
+        job_id=job_id,
+        status="pending",
+        created_at=datetime.now().isoformat()
+    )
+    
+    async def process():
+        try:
+            update_job(job_id, status="processing", progress=10)
+            
+            from src.mastering.logo_removal import LogoRemovalService
+            from src.mastering.inpainting import InpaintingService
+            
+            logo_service = LogoRemovalService(output_dir=str(OUTPUT_DIR / "logo_removal"))
+            inpaint_service = InpaintingService(output_dir=str(OUTPUT_DIR / "inpaint"))
+            
+            update_job(job_id, progress=20)
+            
+            result = logo_service.auto_remove_logo(
+                video_path=video_path,
+                scenes=scenes,
+                output_name=f"logo_removed_{job_id}.mp4",
+                mask_path=mask_path,
+                inpainting_service=inpaint_service,
+            )
+            
+            if result.get("status") == "success":
+                update_job(
+                    job_id,
+                    status="completed",
+                    progress=100,
+                    result_path=result["output_path"],
+                    completed_at=datetime.now().isoformat()
+                )
+            else:
+                update_job(
+                    job_id,
+                    status="completed",
+                    progress=100,
+                    result_path=video_path,
+                    completed_at=datetime.now().isoformat()
+                )
+        except Exception as e:
+            logger.error(f"Logo removal failed: {e}")
+            import traceback
+            traceback.print_exc()
+            update_job(job_id, status="failed", error=str(e))
+    
+    background_tasks.add_task(process)
+    return {"job_id": job_id, "message": "Logo removal started"}
+
+
+@app.post("/api/master/inpaint-image")
+async def inpaint_image(
+    image: UploadFile = File(...),
+    mask: UploadFile = File(...),
+):
+    """Xóa đối tượng khỏi ảnh bằng LaMa AI inpainting"""
+    image_path = save_upload(image, "img_")
+    mask_path = save_upload(mask, "mask_")
+    
+    try:
+        from src.mastering.inpainting import InpaintingService
+        service = InpaintingService(output_dir=str(OUTPUT_DIR / "inpaint"))
+        
+        output_name = f"inpainted_{uuid.uuid4().hex}.png"
+        result_path = service.inpaint(
+            str(image_path),
+            str(mask_path),
+            output_name=output_name,
+        )
+        
+        return {
+            "result_url": f"/api/master/inpaint-result/{os.path.basename(result_path)}",
+            "message": "Inpainting completed"
+        }
+    except Exception as e:
+        logger.error(f"Image inpainting failed: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/master/inpaint-video-preview")
+async def inpaint_video_preview(video: UploadFile = File(...)):
+    """Upload video và trích xuất frame đầu tiên để vẽ mask"""
+    video_path = save_upload(video, "vid_")
+    
+    try:
+        from src.mastering.scene_detection import SceneDetector
+        detector = SceneDetector()
+        # Đảm bảo video tương thích (chuyển đổi AV1 nếu cần)
+        compatible_path = detector.ensure_compatible_video(str(video_path))
+        
+        import cv2
+        cap = cv2.VideoCapture(str(compatible_path))
+        ret, frame = cap.read()
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        duration = total_frames / fps if fps > 0 else 0
+        cap.release()
+
+        if not ret:
+            raise ValueError("Could not read video frame")
+
+        # Save preview frame
+        file_id = uuid.uuid4().hex
+        preview_name = f"preview_{file_id}.png"
+        preview_path = OUTPUT_DIR / "inpaint" / preview_name
+        os.makedirs(preview_path.parent, exist_ok=True)
+        cv2.imwrite(str(preview_path), frame)
+
+        return {
+            "video_path": str(compatible_path), # Trả về path đã convert
+            "preview_url": f"/api/master/inpaint-result/{preview_name}",
+            "info": {
+                "fps": round(fps, 1),
+                "duration": round(duration, 1)
+            }
+        }
+    except Exception as e:
+        logger.error(f"Video preview extraction failed: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/master/inpaint-video")
+async def inpaint_video(
+    background_tasks: BackgroundTasks,
+    video_path: str = Form(...),
+    mask: UploadFile = File(...),
+):
+    """Xóa đối tượng khỏi toàn bộ video"""
+    mask_path = save_upload(mask, "mask_")
+    job_id = uuid.uuid4().hex
+    
+    # Save job info
+    jobs[job_id] = {"status": "processing", "progress": 0}
+    
+    async def process():
+        try:
+            from src.mastering.inpainting import InpaintingService
+            from src.mastering.scene_detection import SceneDetector
+            
+            # Re-verify compatibility just in case
+            detector = SceneDetector()
+            compatible_path = detector.ensure_compatible_video(video_path)
+            
+            service = InpaintingService(output_dir=str(OUTPUT_DIR / "inpaint"))
+            output_name = f"inpainted_{job_id}.mp4"
+            
+            # Update progress callback
+            def update_progress(p):
+                jobs[job_id]["progress"] = int(p)
+                
+            result_path = service.inpaint_video(
+                str(compatible_path),
+                str(mask_path),
+                output_name=output_name,
+                progress_callback=update_progress
+            )
+            
+            jobs[job_id].update({
+                "status": "completed",
+                "progress": 100,
+                "result_url": f"/api/master/inpaint-result/{output_name}"
+            })
+        except Exception as e:
+            logger.error(f"Video inpainting failed: {e}")
+            import traceback
+            traceback.print_exc()
+            jobs[job_id].update({"status": "failed", "error": str(e)})
+
+    background_tasks.add_task(process)
+    return {"job_id": job_id}
+
+
+@app.get("/api/master/inpaint-result/{filename}")
+async def get_inpaint_result(filename: str):
+    """Serve kết quả inpainting"""
+    result_path = OUTPUT_DIR / "inpaint" / filename
+    if not result_path.exists():
+        raise HTTPException(status_code=404, detail="Result not found")
+    
+    ext = result_path.suffix.lower()
+    media_type = {"png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}.get(ext, "image/png")
+    return FileResponse(str(result_path), media_type=media_type)
+
+
 @app.post("/api/subtitle-batch")
 async def add_subtitle_batch(
     background_tasks: BackgroundTasks,

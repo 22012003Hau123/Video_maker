@@ -382,6 +382,56 @@
             color: var(--text-muted);
             opacity: 0.7;
         }
+        /* Modal styles from Mastering_video */
+        .modal-overlay {
+            position: fixed; inset: 0; z-index: 1000;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+            display: flex; align-items: center; justify-content: center;
+            visibility: hidden; opacity: 0;
+            transition: all 0.3s ease;
+        }
+        .modal-overlay.active { visibility: visible; opacity: 1; }
+        .modal-content {
+            background: var(--surface);
+            border: 1px solid var(--surface-light);
+            border-radius: 12px;
+            max-width: 1000px; width: 95%;
+            max-height: 90vh; overflow-y: auto;
+            transform: scale(0.95);
+            transition: all 0.3s ease;
+            padding: 2rem;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+        }
+        .modal-overlay.active .modal-content { transform: scale(1); }
+        
+        #inpaint-canvas {
+            background: #000;
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            cursor: crosshair;
+            display: none;
+        }
+        .canvas-container {
+            position: relative;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--surface-light);
+        }
+        
+        .modal-tabs {
+            display: flex; gap: 0.5rem; border-bottom: 1px solid var(--surface-light); margin-bottom: 1.5rem;
+        }
+        .modal-tab {
+            padding: 0.75rem 1.5rem; cursor: pointer; color: var(--text-muted); border-bottom: 2px solid transparent;
+        }
+        .modal-tab.active {
+            color: var(--primary); border-bottom: 2px solid var(--primary);
+        }
+        .modal-panel { display: none; }
+        .modal-panel.active { display: block; }
     </style>
 </head>
 <body>
@@ -642,45 +692,232 @@ Craft. Time. And a story worth savoring."></textarea>
         
         <!-- Master Panel -->
         <div id="panel-master" class="panel">
-            <h2><i class="ph ph-faders"></i> Video Mastering</h2>
-            <form id="master-form" onsubmit="submitMaster(event)">
-                <div class="grid-2">
-                    <div class="form-group">
-                        <label>Video File</label>
-                        <label class="file-upload" id="video-upload-3">
-                            <input type="file" name="video" accept="video/*" onchange="handleFileSelect(this, 'video-upload-3')">
-                            <div class="icon"><i class="ph ph-video-camera"></i></div>
-                            <div>Drag & drop source video</div>
+            <h2><i class="ph ph-faders"></i> Video Mastering <span style="font-size: 0.6em; color: var(--accent); font-weight: 400;">AI-Powered</span></h2>
+            
+            <!-- Step 1: Upload Video -->
+            <div class="form-group">
+                <label>Video File</label>
+                <label class="file-upload" id="video-upload-3">
+                    <input type="file" id="master-video-input" accept="video/*" onchange="handleFileSelect(this, 'video-upload-3'); updateMasterPreview(this);">
+                    <div class="icon"><i class="ph ph-video-camera"></i></div>
+                    <div>Drag & drop source video</div>
+                </label>
+            </div>
+
+            <!-- Video Preview -->
+            <div id="master-preview-container" style="display: none; margin-top: 1rem; background: var(--surface-light); border-radius: 12px; padding: 1rem; border: 1px solid var(--border-color);">
+                <video id="master-preview-player" controls style="width: 100%; max-height: 360px; border-radius: 8px; background: #000;"></video>
+            </div>
+            
+            <!-- AI Feature Cards -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; margin-top: 1.5rem;">
+                
+                <!-- Card 1: Scene Analysis -->
+                <div style="background: var(--surface-light); border-radius: 12px; padding: 1.5rem; border: 1px solid var(--border-color); transition: all 0.3s;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+                        <div style="width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center;">
+                            <i class="ph ph-film-strip" style="font-size: 1.2rem; color: white;"></i>
+                        </div>
+                        <div>
+                            <h3 style="margin: 0; font-size: 1rem;">Scene Analysis</h3>
+                            <span style="font-size: 0.75rem; color: var(--text-muted);">CLIP AI Classification</span>
+                        </div>
+                    </div>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem; line-height: 1.5;">
+                        Phân tích và phân loại từng cảnh trong video (intro, content, logo, outro, product).
+                    </p>
+                    <button type="button" class="btn btn-primary" onclick="analyzeScenes()" id="btn-analyze" style="width: 100%;">
+                        <i class="ph ph-scan"></i> Analyze Scenes
+                    </button>
+                </div>
+
+                <!-- Card 2: Smart Cut -->
+                <div style="background: var(--surface-light); border-radius: 12px; padding: 1.5rem; border: 1px solid var(--border-color); transition: all 0.3s;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+                        <div style="width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #f093fb, #f5576c); display: flex; align-items: center; justify-content: center;">
+                            <i class="ph ph-scissors" style="font-size: 1.2rem; color: white;"></i>
+                        </div>
+                        <div>
+                            <h3 style="margin: 0; font-size: 1rem;">Smart Cut</h3>
+                            <span style="font-size: 0.75rem; color: var(--text-muted);">Auto Remove Segments</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem;">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer;">
+                            <input type="checkbox" id="sc-intro" checked style="accent-color: var(--accent);"> Remove Intro
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer;">
+                            <input type="checkbox" id="sc-outro" checked style="accent-color: var(--accent);"> Remove Outro
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer;">
+                            <input type="checkbox" id="sc-logo" style="accent-color: var(--accent);"> Remove Logo Scenes
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer;">
+                            <input type="checkbox" id="sc-product" style="accent-color: var(--accent);"> Remove Product Shots
                         </label>
                     </div>
-                    <div class="form-group">
-                        <label>New Logo (Optional)</label>
-                        <label class="file-upload" id="logo-upload">
-                            <input type="file" name="logo" accept="image/*" onchange="handleFileSelect(this, 'logo-upload')">
-                            <div class="icon"><i class="ph ph-tag"></i></div>
-                            <div>Logo PNG/JPG</div>
-                        </label>
+                    <button type="button" class="btn btn-primary" onclick="smartCut()" id="btn-smartcut" style="width: 100%;" disabled>
+                        <i class="ph ph-scissors"></i> Smart Cut
+                    </button>
+                </div>
+
+                <!-- Card 3: Logo Removal -->
+                <div style="background: var(--surface-light); border-radius: 12px; padding: 1.5rem; border: 1px solid var(--border-color); transition: all 0.3s;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+                        <div style="width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #4facfe, #00f2fe); display: flex; align-items: center; justify-content: center;">
+                            <i class="ph ph-eraser" style="font-size: 1.2rem; color: white;"></i>
+                        </div>
+                        <div>
+                            <h3 style="margin: 0; font-size: 1rem;">Logo Removal</h3>
+                            <span style="font-size: 0.75rem; color: var(--text-muted);">Grounding DINO + LaMa AI</span>
+                        </div>
                     </div>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem; line-height: 1.5;">
+                        Tự động phát hiện và xóa logo/watermark bằng AI inpainting.
+                    </p>
+                    <button type="button" class="btn btn-primary" onclick="logoRemove()" id="btn-logo-remove" style="width: 100%;" disabled>
+                        <i class="ph ph-magic-wand"></i> Auto Remove Logo
+                    </button>
                 </div>
-                
-                <div class="form-group">
-                    <label>Packshot/Product (Optional)</label>
-                    <label class="file-upload" id="packshot-upload">
-                        <input type="file" name="packshot" accept="image/*" onchange="handleFileSelect(this, 'packshot-upload')">
-                        <div class="icon"><i class="ph ph-package"></i></div>
-                        <div>Product packshot image</div>
-                    </label>
+
+                <!-- Card 4: Object Removal (LaMa AI) -->
+                <div style="background: var(--surface-light); border-radius: 12px; padding: 1.5rem; border: 1px solid var(--border-color); transition: all 0.3s;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+                        <div style="width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #f59e0b, #ea580c); display: flex; align-items: center; justify-content: center;">
+                            <i class="ph ph-paint-brush" style="font-size: 1.2rem; color: white;"></i>
+                        </div>
+                        <div>
+                            <h3 style="margin: 0; font-size: 1.2rem;">Object Removal</h3>
+                            <span style="font-size: 0.75rem; color: var(--text-muted);">LaMa Inpainting • Video/Image</span>
+                        </div>
+                    </div>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.5rem; line-height: 1.5;">
+                        Xóa vật thể, logo hoặc các chi tiết thừa khỏi ảnh và video bằng công nghệ LaMa AI.
+                    </p>
+                    <button type="button" class="btn btn-primary" onclick="openModal('modal-inpaint')" style="width: 100%; background: linear-gradient(to right, #f59e0b, #ea580c);">
+                        <i class="ph ph-mask-happy"></i> Mở công cụ Xóa
+                    </button>
                 </div>
-                
-                <button type="submit" class="btn btn-primary" id="master-submit">
-                    <i class="ph ph-play-circle"></i> Process Video
-                </button>
-                
-                <div id="master-status" class="status-box" style="display: none;"></div>
-            </form>
+
+            </div>
+
+            <!-- Scene Analysis Results -->
+            <div id="scene-results" style="display: none; margin-top: 1.5rem;">
+                <h3 style="margin-bottom: 1rem;"><i class="ph ph-list-dashes"></i> Scene Timeline</h3>
+                <div id="scene-timeline" style="display: flex; flex-direction: column; gap: 0.5rem;"></div>
+            </div>
+
+            <!-- Master Status -->
+            <div id="master-status" class="status-box" style="display: none; margin-top: 1.5rem;"></div>
         </div>
     </div>
     
+    <!-- ==========================================
+         MODAL: Object Removal (LaMa AI)
+         ========================================== -->
+    <div id="modal-inpaint" class="modal-overlay" onclick="if(event.target===this)closeModal('modal-inpaint')">
+        <div class="modal-content">
+            <!-- Header -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h2 style="margin: 0; color: var(--primary); display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="ph ph-paint-brush"></i> Object Removal (LaMa AI)
+                </h2>
+                <button onclick="closeModal('modal-inpaint')" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.5rem;">&times;</button>
+            </div>
+
+            <!-- Tab Switcher -->
+            <div class="modal-tabs">
+                <div id="m-tab-image" class="modal-tab active" onclick="switchModalTab('image')">🖌️ Image Inpaint</div>
+                <div id="m-tab-video" class="modal-tab" onclick="switchModalTab('video')">📹 Video Inpaint</div>
+            </div>
+
+            <!-- Tab Panel: Image -->
+            <div id="m-panel-image" class="modal-panel active">
+                <div style="display: grid; grid-template-columns: 1fr 300px; gap: 2rem;">
+                    <div class="canvas-container">
+                        <canvas id="inpaint-canvas"></canvas>
+                        <div id="inpaint-placeholder" style="height: 400px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-muted);">
+                            <i class="ph ph-image" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+                            <p>Upload một ảnh để bắt đầu vẽ mask</p>
+                        </div>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 1rem;">
+                        <div class="form-group">
+                            <label>1. Upload Ảnh</label>
+                            <label class="file-upload" id="upload-label-inpaint">
+                                <input type="file" id="m-inpaint-upload" accept="image/*">
+                                <i class="ph ph-plus" style="font-size: 1.5rem;"></i>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>2. Cọ vẽ (Brush Size): <span id="brush-size-val">25</span></label>
+                            <input type="range" id="brush-size" min="5" max="100" value="25" style="width: 100%;">
+                        </div>
+                        <button id="btn-m-clear" class="btn" style="width: 100%; justify-content: center; background: var(--surface-light);">
+                            <i class="ph ph-trash"></i> Xóa Mask
+                        </button>
+                        <button id="btn-m-inpaint" class="btn btn-primary" style="width: 100%; justify-content: center;" disabled>
+                            <i class="ph ph-paint-brush"></i> Xóa Đối Tượng
+                        </button>
+                        
+                        <div id="m-result-area" style="display: none; margin-top: 1rem;">
+                            <label>Kết quả:</label>
+                            <img id="m-result-img" style="width: 100%; border-radius: 8px; border: 1px solid var(--primary);">
+                            <a id="m-download-link" download class="btn" style="width: 100%; justify-content: center; margin-top: 0.5rem; background: var(--success); color: white; text-decoration: none;">
+                                <i class="ph ph-download"></i> Download
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Panel: Video -->
+            <div id="m-panel-video" class="modal-panel">
+                <div style="display: grid; grid-template-columns: 1fr 300px; gap: 2rem;">
+                    <div class="canvas-container">
+                        <canvas id="video-inpaint-canvas"></canvas>
+                        <div id="v-inpaint-placeholder" style="height: 400px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-muted);">
+                            <i class="ph ph-video" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+                            <p>Upload video để trích xuất frame vẽ mask</p>
+                        </div>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 1rem;">
+                        <div class="form-group">
+                            <label>1. Upload Video</label>
+                            <label class="file-upload" id="v-upload-label-inpaint">
+                                <input type="file" id="m-video-upload" accept="video/*">
+                                <i class="ph ph-plus" style="font-size: 1.5rem;"></i>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label>Brush Size: <span id="v-brush-size-val">25</span></label>
+                            <input type="range" id="v-brush-size" min="5" max="100" value="25" style="width: 100%;">
+                        </div>
+                        <button id="btn-v-clear" class="btn" style="width: 100%; justify-content: center; background: var(--surface-light);">
+                            <i class="ph ph-trash"></i> Xóa Mask
+                        </button>
+                        <button id="btn-v-inpaint" class="btn btn-primary" style="width: 100%; justify-content: center;" disabled>
+                            <i class="ph ph-film-strip"></i> Xử lý Video
+                        </button>
+                        
+                        <div id="v-status-area" style="display: none; margin-top: 1rem;">
+                            <h3>Processing...</h3>
+                            <div class="progress-bar">
+                                <div id="v-progress-fill" class="fill" style="width: 0%"></div>
+                            </div>
+                            <div id="v-result-area" style="display: none; margin-top: 1rem;">
+                                <video id="v-result-preview" controls style="width: 100%; border-radius: 8px;"></video>
+                                <a id="v-download-link" download class="btn" style="width: 100%; justify-content: center; margin-top: 0.5rem; background: var(--success); color: white; text-decoration: none;">
+                                    <i class="ph ph-download"></i> Download Video
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <footer class="footer">
     </footer>
     
@@ -933,34 +1170,420 @@ Craft. Time. And a story worth savoring."></textarea>
             }
         }
         
-        async function submitMaster(e) {
-            e.preventDefault();
-            const form = e.target;
-            const formData = new FormData(form);
-            
-            const hasLogo = form.querySelector('input[name="logo"]').files.length > 0;
-            const hasPackshot = form.querySelector('input[name="packshot"]').files.length > 0;
-            
-            document.getElementById('master-submit').disabled = true;
+        // === Mastering AI Functions ===
+        let currentSceneJobId = null;
+
+        function updateMasterPreview(input) {
+            const container = document.getElementById('master-preview-container');
+            const player = document.getElementById('master-preview-player');
+            if (input.files.length > 0) {
+                player.src = URL.createObjectURL(input.files[0]);
+                container.style.display = 'block';
+            } else {
+                container.style.display = 'none';
+            }
+        }
+
+        function getMasterVideo() {
+            const input = document.getElementById('master-video-input');
+            if (!input || !input.files.length) {
+                alert('Please upload a video first!');
+                return null;
+            }
+            return input.files[0];
+        }
+
+        async function analyzeScenes() {
+            const video = getMasterVideo();
+            if (!video) return;
+
+            const btn = document.getElementById('btn-analyze');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Analyzing...';
             document.getElementById('master-status').style.display = 'block';
-            
+
             try {
-                let endpoint = '/api/master/replace-logo';
-                if (hasPackshot && !hasLogo) {
-                    endpoint = '/api/master/add-packshot';
-                }
-                
-                const response = await fetch(endpoint, {
+                const formData = new FormData();
+                formData.append('video', video);
+
+                const response = await fetch('/api/master/analyze-scenes', {
                     method: 'POST',
                     body: formData
                 });
                 const data = await response.json();
-                
+
+                if (data.job_id) {
+                    pollJobStatus(data.job_id, 'master-status');
+                    // Poll for scene results
+                    pollSceneResults(data.job_id);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="ph ph-scan"></i> Analyze Scenes';
+            }
+        }
+
+        async function pollSceneResults(jobId) {
+            const poll = async () => {
+                try {
+                    const response = await fetch(`/api/master/scene-results/${jobId}`);
+                    const data = await response.json();
+
+                    if (data.status === 'completed' && data.scenes) {
+                        currentSceneJobId = jobId;
+                        displaySceneTimeline(data.scenes);
+                        // Enable dependent buttons
+                        document.getElementById('btn-smartcut').disabled = false;
+                        document.getElementById('btn-logo-remove').disabled = false;
+                        document.getElementById('btn-analyze').disabled = false;
+                        document.getElementById('btn-analyze').innerHTML = '<i class="ph ph-check-circle"></i> Analysis Done';
+                    } else if (data.status === 'failed') {
+                        document.getElementById('btn-analyze').disabled = false;
+                        document.getElementById('btn-analyze').innerHTML = '<i class="ph ph-scan"></i> Analyze Scenes';
+                    } else {
+                        setTimeout(poll, 3000);
+                    }
+                } catch (e) {
+                    setTimeout(poll, 5000);
+                }
+            };
+            setTimeout(poll, 3000);
+        }
+
+        function displaySceneTimeline(scenes) {
+            const container = document.getElementById('scene-timeline');
+            const resultsDiv = document.getElementById('scene-results');
+            resultsDiv.style.display = 'block';
+
+            const typeColors = {
+                'content': '#43e97b',
+                'logo': '#f5576c',
+                'intro': '#f093fb',
+                'outro': '#667eea',
+                'product': '#fda085',
+                'black_screen': '#333',
+                'unknown': '#888',
+            };
+
+            let html = '';
+            scenes.forEach(s => {
+                const color = typeColors[s.scene_type] || '#888';
+                const thumbHtml = s.keyframe_url
+                    ? `<img src="${s.keyframe_url}" alt="Scene ${s.index}" style="width: 96px; height: 54px; object-fit: cover; border-radius: 6px; flex-shrink: 0; border: 2px solid ${color};">`
+                    : `<div style="width: 96px; height: 54px; border-radius: 6px; flex-shrink: 0; background: var(--surface); display: flex; align-items: center; justify-content: center; border: 2px solid ${color};"><i class="ph ph-image" style="color: var(--text-muted);"></i></div>`;
+
+                html += `
+                    <div style="display: flex; align-items: center; gap: 1rem; padding: 0.5rem 0.75rem; background: var(--surface-light); border-radius: 8px; border-left: 4px solid ${color};">
+                        ${thumbHtml}
+                        <div style="flex: 1; display: flex; flex-direction: column; gap: 0.25rem;">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <span style="font-size: 0.75rem; font-weight: 600; color: ${color}; text-transform: uppercase; min-width: 70px;">${s.scene_type}</span>
+                                <span style="font-size: 0.7rem; color: var(--text-muted);">${s.start_time.toFixed(1)}s — ${s.end_time.toFixed(1)}s</span>
+                                <span style="font-size: 0.7rem; color: var(--text-muted); margin-left: auto;">${s.duration.toFixed(1)}s</span>
+                            </div>
+                            <div style="height: 6px; background: var(--surface); border-radius: 3px; overflow: hidden;">
+                                <div style="width: ${Math.min(s.duration / 0.3, 100)}%; height: 100%; background: ${color}; border-radius: 3px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        async function smartCut() {
+            if (!currentSceneJobId) {
+                alert('Please run Scene Analysis first!');
+                return;
+            }
+
+            const btn = document.getElementById('btn-smartcut');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Cutting...';
+            document.getElementById('master-status').style.display = 'block';
+
+            try {
+                const formData = new FormData();
+                formData.append('scene_job_id', currentSceneJobId);
+                formData.append('remove_intro', document.getElementById('sc-intro').checked);
+                formData.append('remove_outro', document.getElementById('sc-outro').checked);
+                formData.append('remove_logo', document.getElementById('sc-logo').checked);
+                formData.append('remove_product', document.getElementById('sc-product').checked);
+
+                const response = await fetch('/api/master/smart-cut', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
                 if (data.job_id) {
                     pollJobStatus(data.job_id, 'master-status');
                 }
             } catch (error) {
                 alert('Error: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="ph ph-scissors"></i> Smart Cut';
+            }
+        }
+
+        async function logoRemove() {
+            if (!currentSceneJobId) {
+                alert('Please run Scene Analysis first!');
+                return;
+            }
+
+            const btn = document.getElementById('btn-logo-remove');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Removing...';
+            document.getElementById('master-status').style.display = 'block';
+
+            try {
+                const formData = new FormData();
+                formData.append('scene_job_id', currentSceneJobId);
+
+                const response = await fetch('/api/master/logo-remove', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.job_id) {
+                    pollJobStatus(data.job_id, 'master-status');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="ph ph-magic-wand"></i> Auto Remove Logo';
+            }
+        }
+
+        function openModal(id) {
+            document.getElementById(id).classList.add('active');
+        }
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+        function switchModalTab(tab) {
+            document.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.modal-panel').forEach(p => p.classList.remove('active'));
+            document.getElementById('m-tab-' + tab).classList.add('active');
+            document.getElementById('m-panel-' + tab).classList.add('active');
+        }
+
+        // --- Canvas Drawing Logic (Similar to Mastering_video) ---
+        function initCanvas(canvasId, placeholderId, uploadId, btnId, clearBtnId, brushSizeId, brushValId) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            let isDrawing = false;
+            let brushSize = 25;
+            let originalImage = null;
+            let maskCanvas = document.createElement('canvas');
+            let maskCtx = maskCanvas.getContext('2d');
+            let uploadedFile = null;
+
+            document.getElementById(brushSizeId).oninput = (e) => {
+                brushSize = parseInt(e.target.value);
+                document.getElementById(brushValId).textContent = brushSize;
+            };
+
+            const handleFile = (file) => {
+                uploadedFile = file;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const maxW = 700;
+                        let w = img.width, h = img.height;
+                        if (w > maxW) { h = (maxW / w) * h; w = maxW; }
+                        canvas.width = w; canvas.height = h;
+                        canvas.style.display = 'block';
+                        document.getElementById(placeholderId).style.display = 'none';
+                        ctx.drawImage(img, 0, 0, w, h);
+                        originalImage = img;
+                        maskCanvas.width = w; maskCanvas.height = h;
+                        maskCtx.fillStyle = 'black';
+                        maskCtx.fillRect(0, 0, w, h);
+                        document.getElementById(btnId).disabled = false;
+                    };
+                    img.src = ev.target.result;
+                };
+                reader.readAsDataURL(file);
+            };
+
+            document.getElementById(uploadId).onchange = (e) => {
+                if (e.target.files[0]) handleFile(e.target.files[0]);
+            };
+
+            const draw = (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+                const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+                ctx.globalAlpha = 0.5; ctx.fillStyle = '#ff3366';
+                ctx.beginPath(); ctx.arc(x, y, brushSize / 2, 0, Math.PI * 2); ctx.fill();
+                maskCtx.fillStyle = 'white';
+                maskCtx.beginPath(); maskCtx.arc(x, y, brushSize / 2, 0, Math.PI * 2); maskCtx.fill();
+            };
+
+            canvas.onmousedown = (e) => { isDrawing = true; draw(e); };
+            canvas.onmousemove = (e) => { if (isDrawing) draw(e); };
+            window.onmouseup = () => isDrawing = false;
+
+            document.getElementById(clearBtnId).onclick = () => {
+                if (!originalImage) return;
+                ctx.drawImage(originalImage, 0, 0, canvas.width, canvas.height);
+                maskCtx.fillStyle = 'black'; maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
+            };
+
+            return { getMask: () => maskCanvas, getFile: () => uploadedFile, setFile: (file) => handleFile(file) };
+        }
+
+        const imgInpaint = initCanvas('inpaint-canvas', 'inpaint-placeholder', 'm-inpaint-upload', 'btn-m-inpaint', 'btn-m-clear', 'brush-size', 'brush-size-val');
+        const vidInpaint = initCanvas('video-inpaint-canvas', 'v-inpaint-placeholder', 'm-video-upload', 'btn-v-inpaint', 'btn-v-clear', 'v-brush-size', 'v-brush-size-val');
+
+        // Image inpaint submit
+        document.getElementById('btn-m-inpaint').onclick = async () => {
+            const btn = document.getElementById('btn-m-inpaint');
+            btn.disabled = true; btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Processing...';
+            try {
+                const maskBlob = await new Promise(r => imgInpaint.getMask().toBlob(r, 'image/png'));
+                const formData = new FormData();
+                formData.append('image', imgInpaint.getFile());
+                formData.append('mask', maskBlob, 'mask.png');
+                const res = await fetch('/api/master/inpaint-image', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (data.result_url) {
+                    document.getElementById('m-result-area').style.display = 'block';
+                    document.getElementById('m-result-img').src = data.result_url + '?t=' + Date.now();
+                    document.getElementById('m-download-link').href = data.result_url;
+                }
+            } catch (e) { alert(e.message); }
+            btn.disabled = false; btn.innerHTML = '<i class="ph ph-paint-brush"></i> Xóa Đối Tượng';
+        };
+
+        // Video inpaint submit
+        let currentVideoPath = null;
+        document.getElementById('m-video-upload').addEventListener('change', async (e) => {
+            if (!e.target.files[0]) return;
+            const btn = document.getElementById('btn-v-inpaint');
+            btn.innerHTML = '⏳ Extracting frame...';
+            const formData = new FormData();
+            formData.append('video', e.target.files[0]);
+            try {
+                const res = await fetch('/api/master/inpaint-video-preview', { method: 'POST', body: formData });
+                const data = await res.json();
+                currentVideoPath = data.video_path;
+                // Use preview URL to set the canvas background
+                const imgRes = await fetch(data.preview_url);
+                const blob = await imgRes.blob();
+                vidInpaint.setFile(new File([blob], 'preview.png'));
+                btn.innerHTML = '<i class="ph ph-film-strip"></i> Xử lý Video';
+            } catch (e) { alert(e.message); btn.innerHTML = 'Xử lý Video'; }
+        });
+
+        document.getElementById('btn-v-inpaint').onclick = async () => {
+            if (!currentVideoPath) return;
+            const btn = document.getElementById('btn-v-inpaint');
+            btn.disabled = true;
+            document.getElementById('v-status-area').style.display = 'block';
+            try {
+                const maskBlob = await new Promise(r => vidInpaint.getMask().toBlob(r, 'image/png'));
+                const formData = new FormData();
+                formData.append('video_path', currentVideoPath);
+                formData.append('mask', maskBlob, 'mask.png');
+                const res = await fetch('/api/master/inpaint-video', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (data.job_id) pollVideoInpaint(data.job_id);
+            } catch (e) { alert(e.message); btn.disabled = false; }
+        };
+
+        function pollVideoInpaint(jobId) {
+            const poll = async () => {
+                const res = await fetch('/api/jobs/' + jobId);
+                const job = await res.json();
+                document.getElementById('v-progress-fill').style.width = job.progress + '%';
+                if (job.status === 'completed') {
+                    document.getElementById('v-result-area').style.display = 'block';
+                    document.getElementById('v-result-preview').src = job.result_url;
+                    document.getElementById('v-download-link').href = job.result_url;
+                    document.getElementById('btn-v-inpaint').disabled = false;
+                } else if (job.status === 'failed') {
+                    alert('Lỗi: ' + job.error);
+                    document.getElementById('btn-v-inpaint').disabled = false;
+                } else {
+                    setTimeout(poll, 2000);
+                }
+            };
+            poll();
+        }
+
+        async function replaceLogo() {
+            const video = getMasterVideo();
+            if (!video) return;
+
+            const logoInput = document.getElementById('logo-input');
+            if (!logoInput || !logoInput.files.length) {
+                alert('Please upload a new logo!');
+                return;
+            }
+
+            document.getElementById('btn-replace-logo').disabled = true;
+            document.getElementById('master-status').style.display = 'block';
+
+            try {
+                const formData = new FormData();
+                formData.append('video', video);
+                formData.append('logo', logoInput.files[0]);
+
+                const response = await fetch('/api/master/replace-logo', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.job_id) {
+                    pollJobStatus(data.job_id, 'master-status');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                document.getElementById('btn-replace-logo').disabled = false;
+            }
+        }
+
+        async function addPackshot() {
+            const video = getMasterVideo();
+            if (!video) return;
+
+            const psInput = document.getElementById('packshot-input');
+            if (!psInput || !psInput.files.length) {
+                alert('Please upload a packshot image!');
+                return;
+            }
+
+            document.getElementById('btn-packshot').disabled = true;
+            document.getElementById('master-status').style.display = 'block';
+
+            try {
+                const formData = new FormData();
+                formData.append('video', video);
+                formData.append('packshot', psInput.files[0]);
+
+                const response = await fetch('/api/master/add-packshot', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.job_id) {
+                    pollJobStatus(data.job_id, 'master-status');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                document.getElementById('btn-packshot').disabled = false;
             }
         }
         
@@ -986,39 +1609,44 @@ Craft. Time. And a story worth savoring."></textarea>
                     `;
                     
                     if (job.status === 'completed') {
-                        html += '<div style="margin-top: 1.5rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">';
+                        const downloadUrl = `/api/download/${jobId}`;
                         
-                        const files = job.result_files || [{path: job.result_path, type: 'video', label: 'Download Result', language: 'en'}];
-                        
-                        files.forEach((file, index) => {
-                            // Use index-based download URL if available in new backend, else fallback
-                            // Since we updated backend to have /api/download/{job_id}/{index}, we use that.
-                            // For legacy (single file), we fallback to /api/download/{job_id}
-                            const downloadUrl = job.result_files ? `/api/download/${jobId}/${index}` : `/api/download/${jobId}`;
-                            
-                            html += `
-                                <div style="background: var(--surface-light); border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color);">
-                                    ${file.type === 'video' ? `
-                                        <video controls style="width: 100%; height: 160px; object-fit: cover; background: #000;">
-                                            <source src="${downloadUrl}" type="video/mp4">
-                                            Your browser does not support video.
-                                        </video>
-                                    ` : `
-                                        <div style="height: 160px; display: flex; align-items: center; justify-content: center; background: rgba(59, 130, 246, 0.05); color: var(--primary);">
-                                            <i class="ph ph-file-text" style="font-size: 3rem;"></i>
-                                        </div>
-                                    `}
-                                    <div style="padding: 1rem;">
-                                        <div style="font-weight: 600; margin-bottom: 0.5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${file.label || 'Result File'}</div>
-                                        <a href="${downloadUrl}" class="btn btn-sm" style="width: 100%; justify-content: center; background: var(--surface); border: 1px solid var(--border-color); color: var(--text);">
-                                            <i class="ph ph-download-simple"></i> Download
-                                        </a>
-                                    </div>
+                        html += `
+                            <div style="margin-top: 1.5rem; background: var(--surface-light); border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color);">
+                                <video controls src="${downloadUrl}" style="width: 100%; max-height: 400px; background: #000; display: block;"></video>
+                                <div style="padding: 1rem; display: flex; align-items: center; gap: 1rem;">
+                                    <a href="${downloadUrl}" download class="btn btn-primary" style="flex: 1; justify-content: center; text-decoration: none;">
+                                        <i class="ph ph-download-simple"></i> Download Video
+                                    </a>
                                 </div>
-                            `;
-                        });
+                            </div>
+                        `;
                         
-                        html += '</div>';
+                        // Also handle multi-file results
+                        if (job.result_files && job.result_files.length > 0) {
+                            html += '<div style="margin-top: 1rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">';
+                            job.result_files.forEach((file, index) => {
+                                const fileUrl = `/api/download/${jobId}/${index}`;
+                                html += `
+                                    <div style="background: var(--surface-light); border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color);">
+                                        ${file.type === 'video' ? `
+                                            <video controls src="${fileUrl}" style="width: 100%; height: 160px; object-fit: cover; background: #000;"></video>
+                                        ` : `
+                                            <div style="height: 100px; display: flex; align-items: center; justify-content: center; background: rgba(59, 130, 246, 0.05); color: var(--primary);">
+                                                <i class="ph ph-file-text" style="font-size: 2.5rem;"></i>
+                                            </div>
+                                        `}
+                                        <div style="padding: 0.75rem;">
+                                            <div style="font-weight: 600; margin-bottom: 0.5rem; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${file.label || 'Result'}</div>
+                                            <a href="${fileUrl}" download class="btn btn-sm" style="width: 100%; justify-content: center; background: var(--surface); border: 1px solid var(--border-color); color: var(--text); text-decoration: none;">
+                                                <i class="ph ph-download-simple"></i> Download
+                                            </a>
+                                        </div>
+                                    </div>
+                                `;
+                            });
+                            html += '</div>';
+                        }
                         
                         // Re-enable submit buttons
                         document.querySelectorAll('button[type="submit"]').forEach(b => b.disabled = false);
@@ -1028,7 +1656,10 @@ Craft. Time. And a story worth savoring."></textarea>
                     
                     statusBox.innerHTML = html;
                     
-                    if (job.status !== 'completed' && job.status !== 'failed') {
+                    if (job.status === 'completed' || job.status === 'failed') {
+                        // Auto-scroll to results
+                        statusBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    } else {
                         setTimeout(poll, 2000);
                     }
                 } catch (e) {
