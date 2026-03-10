@@ -35,7 +35,7 @@ class InpaintingService:
         if self.lama_model is not None:
             return
         print(f"Loading LaMa model on {self.device}...")
-        from lama_cleaner.model.lama import LaMa
+        from iopaint.model.lama import LaMa
         self.lama_model = LaMa(device=self.device)
         print("LaMa model loaded.")
 
@@ -45,7 +45,7 @@ class InpaintingService:
     def inpaint(self, image_path: str, mask_path: str, output_name: Optional[str] = None) -> str:
         """Single image inpainting using LaMa."""
         self._load_lama()
-        from lama_cleaner.schema import Config
+        from iopaint.schema import InpaintRequest as Config
 
         image_bgr = cv2.imread(image_path)
         if image_bgr is None:
@@ -124,7 +124,7 @@ class InpaintingService:
         import time
 
         self._load_lama()
-        from lama_cleaner.schema import Config
+        from iopaint.schema import InpaintRequest as Config
 
         config = Config(
             ldm_steps=25, ldm_sampler="plms",

@@ -119,7 +119,7 @@ class LogoRemovalService:
             results = self._gdino_processor.post_process_grounded_object_detection(
                 outputs,
                 inputs["input_ids"],
-                threshold=threshold,
+                box_threshold=threshold,
                 text_threshold=threshold,
                 target_sizes=[(vid_height, vid_width)]
             )[0]

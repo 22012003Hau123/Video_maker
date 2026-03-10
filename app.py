@@ -1634,12 +1634,28 @@ async def download_result(job_id: str):
     if not job.result_path or not Path(job.result_path).exists():
         raise HTTPException(status_code=404, detail="Result file not found")
     
-    ext = Path(job.result_path).suffix.lower()
+    result_path = Path(job.result_path)
+    
+    # Nếu result_path là thư mục (vd: scene analysis), zip lại rồi trả về
+    if result_path.is_dir():
+        import zipfile
+        zip_path = result_path.parent / f"{result_path.name}.zip"
+        with zipfile.ZipFile(str(zip_path), 'w', zipfile.ZIP_DEFLATED) as zf:
+            for file in sorted(result_path.iterdir()):
+                if file.is_file():
+                    zf.write(str(file), file.name)
+        return FileResponse(
+            str(zip_path),
+            filename=f"{result_path.name}.zip",
+            media_type="application/zip"
+        )
+    
+    ext = result_path.suffix.lower()
     media_types = {".mp4": "video/mp4", ".srt": "text/plain", ".zip": "application/zip"}
     
     return FileResponse(
-        job.result_path,
-        filename=Path(job.result_path).name,
+        str(result_path),
+        filename=result_path.name,
         media_type=media_types.get(ext, "application/octet-stream")
     )
 

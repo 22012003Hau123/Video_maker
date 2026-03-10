@@ -276,7 +276,7 @@
         
         .progress-bar .fill {
             height: 100%;
-            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            background: var(--primary);
             border-radius: 4px;
             transition: width 0.5s ease;
         }
@@ -432,9 +432,38 @@
         }
         .modal-panel { display: none; }
         .modal-panel.active { display: block; }
+
+        /* Toast notifications */
+        .toast-container {
+            position: fixed; top: 1.5rem; right: 1.5rem; z-index: 9999;
+            display: flex; flex-direction: column; gap: 0.5rem;
+        }
+        .toast {
+            padding: 0.75rem 1.25rem; border-radius: 10px; color: white;
+            font-size: 0.85rem; font-weight: 500;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+            animation: toastIn 0.35s ease, toastOut 0.35s ease 4s forwards;
+            display: flex; align-items: center; gap: 0.5rem;
+            max-width: 350px;
+        }
+        .toast.success { background: #2ecc71; color: #fff; }
+        .toast.error { background: #e74c3c; }
+        .toast.info { background: #6366f1; }
+        @keyframes toastIn { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes toastOut { from { opacity: 1; } to { opacity: 0; transform: translateY(-10px); } }
+
+        .card-status {
+            margin-top: 0.75rem; padding: 0.5rem 0.75rem; border-radius: 6px;
+            font-size: 0.8rem; display: none; align-items: center; gap: 0.5rem;
+            background: rgba(99, 102, 241, 0.1); color: var(--primary);
+        }
+        .card-status.active { display: flex; }
+        .card-status.done { background: rgba(67, 233, 123, 0.1); color: #43e97b; }
+        .card-status.error { background: rgba(245, 87, 108, 0.1); color: #f5576c; }
     </style>
 </head>
 <body>
+    <div id="toast-container" class="toast-container"></div>
     <nav class="navbar">
         <div class="logo">
             <i class="ph ph-film-slate"></i> Video Subtitles Automation
@@ -694,28 +723,38 @@ Craft. Time. And a story worth savoring."></textarea>
         <div id="panel-master" class="panel">
             <h2><i class="ph ph-faders"></i> Video Mastering <span style="font-size: 0.6em; color: var(--accent); font-weight: 400;">AI-Powered</span></h2>
             
-            <!-- Step 1: Upload Video -->
-            <div class="form-group">
-                <label>Video File</label>
-                <label class="file-upload" id="video-upload-3">
-                    <input type="file" id="master-video-input" accept="video/*" onchange="handleFileSelect(this, 'video-upload-3'); updateMasterPreview(this);">
-                    <div class="icon"><i class="ph ph-video-camera"></i></div>
-                    <div>Drag & drop source video</div>
-                </label>
+            <!-- Step 1: Upload Video + Preview -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 0.5rem;">
+                <div class="form-group">
+                    <label>Video File</label>
+                    <label class="file-upload" id="video-upload-3" style="min-height: 180px;">
+                        <input type="file" id="master-video-input" accept="video/*" onchange="handleFileSelect(this, 'video-upload-3'); updateMasterPreview(this);">
+                        <div class="icon"><i class="ph ph-video-camera"></i></div>
+                        <div>Drag & drop source video</div>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>Preview</label>
+                    <div id="master-preview-container" style="background: var(--surface-light); border-radius: 12px; min-height: 180px; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid var(--border-color);">
+                        <video id="master-preview-player" controls style="width: 100%; height: 180px; object-fit: contain; display: none;"></video>
+                        <span id="master-preview-placeholder" style="color: var(--text-muted);"><i class="ph ph-film-strip"></i> Preview will appear here</span>
+                    </div>
+                </div>
             </div>
 
-            <!-- Video Preview -->
-            <div id="master-preview-container" style="display: none; margin-top: 1rem; background: var(--surface-light); border-radius: 12px; padding: 1rem; border: 1px solid var(--border-color);">
-                <video id="master-preview-player" controls style="width: 100%; max-height: 360px; border-radius: 8px; background: #000;"></video>
+            <!-- Scene Analysis Results (horizontal) -->
+            <div id="scene-results" style="display: none; margin-bottom: 1rem;">
+                <h3 style="margin-bottom: 0.75rem; font-size: 0.95rem;"><i class="ph ph-list-dashes"></i> Scene Timeline</h3>
+                <div id="scene-timeline" style="display: flex; gap: 0.5rem; overflow-x: auto; padding-bottom: 0.5rem;"></div>
             </div>
-            
+
             <!-- AI Feature Cards -->
             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; margin-top: 1.5rem;">
                 
                 <!-- Card 1: Scene Analysis -->
                 <div style="background: var(--surface-light); border-radius: 12px; padding: 1.5rem; border: 1px solid var(--border-color); transition: all 0.3s;">
                     <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
-                        <div style="width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center;">
+                        <div style="width: 40px; height: 40px; border-radius: 10px; background: #667eea; display: flex; align-items: center; justify-content: center;">
                             <i class="ph ph-film-strip" style="font-size: 1.2rem; color: white;"></i>
                         </div>
                         <div>
@@ -734,7 +773,7 @@ Craft. Time. And a story worth savoring."></textarea>
                 <!-- Card 2: Smart Cut -->
                 <div style="background: var(--surface-light); border-radius: 12px; padding: 1.5rem; border: 1px solid var(--border-color); transition: all 0.3s;">
                     <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
-                        <div style="width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #f093fb, #f5576c); display: flex; align-items: center; justify-content: center;">
+                        <div style="width: 40px; height: 40px; border-radius: 10px; background: #f5576c; display: flex; align-items: center; justify-content: center;">
                             <i class="ph ph-scissors" style="font-size: 1.2rem; color: white;"></i>
                         </div>
                         <div>
@@ -759,12 +798,13 @@ Craft. Time. And a story worth savoring."></textarea>
                     <button type="button" class="btn btn-primary" onclick="smartCut()" id="btn-smartcut" style="width: 100%;" disabled>
                         <i class="ph ph-scissors"></i> Smart Cut
                     </button>
+                    <div id="status-smartcut" class="card-status"></div>
                 </div>
 
                 <!-- Card 3: Logo Removal -->
                 <div style="background: var(--surface-light); border-radius: 12px; padding: 1.5rem; border: 1px solid var(--border-color); transition: all 0.3s;">
                     <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
-                        <div style="width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #4facfe, #00f2fe); display: flex; align-items: center; justify-content: center;">
+                        <div style="width: 40px; height: 40px; border-radius: 10px; background: #4facfe; display: flex; align-items: center; justify-content: center;">
                             <i class="ph ph-eraser" style="font-size: 1.2rem; color: white;"></i>
                         </div>
                         <div>
@@ -778,12 +818,13 @@ Craft. Time. And a story worth savoring."></textarea>
                     <button type="button" class="btn btn-primary" onclick="logoRemove()" id="btn-logo-remove" style="width: 100%;" disabled>
                         <i class="ph ph-magic-wand"></i> Auto Remove Logo
                     </button>
+                    <div id="status-logo" class="card-status"></div>
                 </div>
 
                 <!-- Card 4: Object Removal (LaMa AI) -->
                 <div style="background: var(--surface-light); border-radius: 12px; padding: 1.5rem; border: 1px solid var(--border-color); transition: all 0.3s;">
                     <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
-                        <div style="width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #f59e0b, #ea580c); display: flex; align-items: center; justify-content: center;">
+                        <div style="width: 40px; height: 40px; border-radius: 10px; background: #f59e0b; display: flex; align-items: center; justify-content: center;">
                             <i class="ph ph-paint-brush" style="font-size: 1.2rem; color: white;"></i>
                         </div>
                         <div>
@@ -794,20 +835,16 @@ Craft. Time. And a story worth savoring."></textarea>
                     <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.5rem; line-height: 1.5;">
                         Xóa vật thể, logo hoặc các chi tiết thừa khỏi ảnh và video bằng công nghệ LaMa AI.
                     </p>
-                    <button type="button" class="btn btn-primary" onclick="openModal('modal-inpaint')" style="width: 100%; background: linear-gradient(to right, #f59e0b, #ea580c);">
+                    <button type="button" class="btn btn-primary" onclick="openModal('modal-inpaint')" style="width: 100%; background: #f59e0b;">
                         <i class="ph ph-mask-happy"></i> Mở công cụ Xóa
                     </button>
                 </div>
 
             </div>
 
-            <!-- Scene Analysis Results -->
-            <div id="scene-results" style="display: none; margin-top: 1.5rem;">
-                <h3 style="margin-bottom: 1rem;"><i class="ph ph-list-dashes"></i> Scene Timeline</h3>
-                <div id="scene-timeline" style="display: flex; flex-direction: column; gap: 0.5rem;"></div>
-            </div>
 
-            <!-- Master Status -->
+
+            <!-- Master Status (kept for subtitle/legal polling compatibility) -->
             <div id="master-status" class="status-box" style="display: none; margin-top: 1.5rem;"></div>
         </div>
     </div>
@@ -1174,13 +1211,16 @@ Craft. Time. And a story worth savoring."></textarea>
         let currentSceneJobId = null;
 
         function updateMasterPreview(input) {
-            const container = document.getElementById('master-preview-container');
             const player = document.getElementById('master-preview-player');
+            const placeholder = document.getElementById('master-preview-placeholder');
             if (input.files.length > 0) {
                 player.src = URL.createObjectURL(input.files[0]);
-                container.style.display = 'block';
+                player.style.display = 'block';
+                if (placeholder) placeholder.style.display = 'none';
+                clearMasterResults();
             } else {
-                container.style.display = 'none';
+                player.style.display = 'none';
+                if (placeholder) placeholder.style.display = '';
             }
         }
 
@@ -1193,6 +1233,62 @@ Craft. Time. And a story worth savoring."></textarea>
             return input.files[0];
         }
 
+        // === Clear previous master results ===
+        function clearMasterResults() {
+            ['status-smartcut', 'status-logo'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.className = 'card-status';
+                    el.innerHTML = '';
+                    el.style.flexDirection = '';
+                }
+            });
+        }
+
+        // === Toast notification ===
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `<i class="ph ph-${type === 'success' ? 'check-circle' : type === 'error' ? 'x-circle' : 'info'}"></i> ${message}`;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 4500);
+        }
+
+        // === Lightweight polling for master jobs (no big status box) ===
+        function pollMasterJob(jobId, { onComplete, onFail, statusEl, btnEl }) {
+            const poll = async () => {
+                try {
+                    const response = await fetch('/api/jobs/' + jobId);
+                    const job = await response.json();
+
+                    if (statusEl) {
+                        statusEl.className = 'card-status active';
+                        statusEl.innerHTML = `<i class="ph ph-spinner ph-spin"></i> Processing... ${job.progress}%`;
+                    }
+
+                    if (job.status === 'completed') {
+                        if (statusEl) {
+                            statusEl.className = 'card-status active done';
+                            statusEl.innerHTML = `<i class="ph ph-check-circle"></i> Done!`;
+                        }
+                        if (onComplete) onComplete(job);
+                    } else if (job.status === 'failed') {
+                        if (statusEl) {
+                            statusEl.className = 'card-status active error';
+                            statusEl.innerHTML = `<i class="ph ph-x-circle"></i> ${job.error || 'Failed'}`;
+                        }
+                        if (onFail) onFail(job);
+                    } else {
+                        setTimeout(poll, 2500);
+                    }
+                } catch (e) {
+                    setTimeout(poll, 5000);
+                }
+            };
+            setTimeout(poll, 2000);
+        }
+
         async function analyzeScenes() {
             const video = getMasterVideo();
             if (!video) return;
@@ -1200,7 +1296,6 @@ Craft. Time. And a story worth savoring."></textarea>
             const btn = document.getElementById('btn-analyze');
             btn.disabled = true;
             btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Analyzing...';
-            document.getElementById('master-status').style.display = 'block';
 
             try {
                 const formData = new FormData();
@@ -1213,12 +1308,10 @@ Craft. Time. And a story worth savoring."></textarea>
                 const data = await response.json();
 
                 if (data.job_id) {
-                    pollJobStatus(data.job_id, 'master-status');
-                    // Poll for scene results
                     pollSceneResults(data.job_id);
                 }
             } catch (error) {
-                alert('Error: ' + error.message);
+                showToast('Error: ' + error.message, 'error');
                 btn.disabled = false;
                 btn.innerHTML = '<i class="ph ph-scan"></i> Analyze Scenes';
             }
@@ -1233,14 +1326,15 @@ Craft. Time. And a story worth savoring."></textarea>
                     if (data.status === 'completed' && data.scenes) {
                         currentSceneJobId = jobId;
                         displaySceneTimeline(data.scenes);
-                        // Enable dependent buttons
                         document.getElementById('btn-smartcut').disabled = false;
                         document.getElementById('btn-logo-remove').disabled = false;
                         document.getElementById('btn-analyze').disabled = false;
                         document.getElementById('btn-analyze').innerHTML = '<i class="ph ph-check-circle"></i> Analysis Done';
+                        showToast(`Scene analysis done! ${data.scenes.length} scenes detected.`, 'success');
                     } else if (data.status === 'failed') {
                         document.getElementById('btn-analyze').disabled = false;
                         document.getElementById('btn-analyze').innerHTML = '<i class="ph ph-scan"></i> Analyze Scenes';
+                        showToast('Scene analysis failed!', 'error');
                     } else {
                         setTimeout(poll, 3000);
                     }
@@ -1270,21 +1364,15 @@ Craft. Time. And a story worth savoring."></textarea>
             scenes.forEach(s => {
                 const color = typeColors[s.scene_type] || '#888';
                 const thumbHtml = s.keyframe_url
-                    ? `<img src="${s.keyframe_url}" alt="Scene ${s.index}" style="width: 96px; height: 54px; object-fit: cover; border-radius: 6px; flex-shrink: 0; border: 2px solid ${color};">`
-                    : `<div style="width: 96px; height: 54px; border-radius: 6px; flex-shrink: 0; background: var(--surface); display: flex; align-items: center; justify-content: center; border: 2px solid ${color};"><i class="ph ph-image" style="color: var(--text-muted);"></i></div>`;
+                    ? `<img src="${s.keyframe_url}" alt="Scene ${s.index}" style="width: 100%; height: 64px; object-fit: cover; border-radius: 4px;">`
+                    : `<div style="width: 100%; height: 64px; border-radius: 4px; background: var(--surface); display: flex; align-items: center; justify-content: center;"><i class="ph ph-image" style="color: var(--text-muted);"></i></div>`;
 
                 html += `
-                    <div style="display: flex; align-items: center; gap: 1rem; padding: 0.5rem 0.75rem; background: var(--surface-light); border-radius: 8px; border-left: 4px solid ${color};">
+                    <div style="min-width: 110px; max-width: 110px; background: var(--surface-light); border-radius: 8px; border-top: 3px solid ${color}; padding: 0.4rem; flex-shrink: 0; cursor: default;">
                         ${thumbHtml}
-                        <div style="flex: 1; display: flex; flex-direction: column; gap: 0.25rem;">
-                            <div style="display: flex; align-items: center; gap: 0.75rem;">
-                                <span style="font-size: 0.75rem; font-weight: 600; color: ${color}; text-transform: uppercase; min-width: 70px;">${s.scene_type}</span>
-                                <span style="font-size: 0.7rem; color: var(--text-muted);">${s.start_time.toFixed(1)}s — ${s.end_time.toFixed(1)}s</span>
-                                <span style="font-size: 0.7rem; color: var(--text-muted); margin-left: auto;">${s.duration.toFixed(1)}s</span>
-                            </div>
-                            <div style="height: 6px; background: var(--surface); border-radius: 3px; overflow: hidden;">
-                                <div style="width: ${Math.min(s.duration / 0.3, 100)}%; height: 100%; background: ${color}; border-radius: 3px;"></div>
-                            </div>
+                        <div style="margin-top: 0.3rem; text-align: center;">
+                            <div style="font-size: 0.65rem; font-weight: 700; color: ${color}; text-transform: uppercase;">${s.scene_type}</div>
+                            <div style="font-size: 0.6rem; color: var(--text-muted);">${s.start_time.toFixed(1)}s – ${s.end_time.toFixed(1)}s</div>
                         </div>
                     </div>
                 `;
@@ -1299,9 +1387,10 @@ Craft. Time. And a story worth savoring."></textarea>
             }
 
             const btn = document.getElementById('btn-smartcut');
+            const statusEl = document.getElementById('status-smartcut');
             btn.disabled = true;
             btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Cutting...';
-            document.getElementById('master-status').style.display = 'block';
+            clearMasterResults();
 
             try {
                 const formData = new FormData();
@@ -1318,11 +1407,36 @@ Craft. Time. And a story worth savoring."></textarea>
                 const data = await response.json();
 
                 if (data.job_id) {
-                    pollJobStatus(data.job_id, 'master-status');
+                    pollMasterJob(data.job_id, {
+                        statusEl,
+                        onComplete: (job) => {
+                            btn.disabled = false;
+                            btn.innerHTML = '<i class="ph ph-scissors"></i> Smart Cut';
+                            if (job.result_path && job.result_path.endsWith('.mp4')) {
+                                const dlUrl = '/api/download/' + data.job_id;
+                                statusEl.className = 'card-status active done';
+                                statusEl.style.flexDirection = 'column';
+                                statusEl.innerHTML = `
+                                    <video controls src="${dlUrl}" style="width: 100%; border-radius: 6px; margin-bottom: 0.5rem;"></video>
+                                    <a href="${dlUrl}" download class="btn btn-primary" style="width: 100%; justify-content: center; text-decoration: none; font-size: 0.8rem;">
+                                        <i class="ph ph-download-simple"></i> Download Video
+                                    </a>`;
+                                showToast('Smart Cut completed!', 'success');
+                            } else {
+                                showToast('Smart Cut completed!', 'success');
+                            }
+                        },
+                        onFail: (job) => {
+                            btn.disabled = false;
+                            btn.innerHTML = '<i class="ph ph-scissors"></i> Smart Cut';
+                            statusEl.className = 'card-status active error';
+                            statusEl.innerHTML = '<i class="ph ph-x-circle"></i> ' + (job.error || 'Failed');
+                            showToast('Smart Cut failed!', 'error');
+                        }
+                    });
                 }
             } catch (error) {
-                alert('Error: ' + error.message);
-            } finally {
+                showToast('Error: ' + error.message, 'error');
                 btn.disabled = false;
                 btn.innerHTML = '<i class="ph ph-scissors"></i> Smart Cut';
             }
@@ -1335,10 +1449,10 @@ Craft. Time. And a story worth savoring."></textarea>
             }
 
             const btn = document.getElementById('btn-logo-remove');
+            const statusEl = document.getElementById('status-logo');
             btn.disabled = true;
             btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Removing...';
-            document.getElementById('master-status').style.display = 'block';
-
+            clearMasterResults();
             try {
                 const formData = new FormData();
                 formData.append('scene_job_id', currentSceneJobId);
@@ -1350,11 +1464,36 @@ Craft. Time. And a story worth savoring."></textarea>
                 const data = await response.json();
 
                 if (data.job_id) {
-                    pollJobStatus(data.job_id, 'master-status');
+                    pollMasterJob(data.job_id, {
+                        statusEl,
+                        onComplete: (job) => {
+                            btn.disabled = false;
+                            btn.innerHTML = '<i class="ph ph-magic-wand"></i> Auto Remove Logo';
+                            if (job.result_path && job.result_path.endsWith('.mp4')) {
+                                const dlUrl = '/api/download/' + data.job_id;
+                                statusEl.className = 'card-status active done';
+                                statusEl.style.flexDirection = 'column';
+                                statusEl.innerHTML = `
+                                    <video controls src="${dlUrl}" style="width: 100%; border-radius: 6px; margin-bottom: 0.5rem;"></video>
+                                    <a href="${dlUrl}" download class="btn btn-primary" style="width: 100%; justify-content: center; text-decoration: none; font-size: 0.8rem;">
+                                        <i class="ph ph-download-simple"></i> Download Video
+                                    </a>`;
+                                showToast('Logo removal completed!', 'success');
+                            } else {
+                                showToast('Logo removal completed!', 'success');
+                            }
+                        },
+                        onFail: (job) => {
+                            btn.disabled = false;
+                            btn.innerHTML = '<i class="ph ph-magic-wand"></i> Auto Remove Logo';
+                            statusEl.className = 'card-status active error';
+                            statusEl.innerHTML = '<i class="ph ph-x-circle"></i> ' + (job.error || 'Failed');
+                            showToast('Logo removal failed!', 'error');
+                        }
+                    });
                 }
             } catch (error) {
-                alert('Error: ' + error.message);
-            } finally {
+                showToast('Error: ' + error.message, 'error');
                 btn.disabled = false;
                 btn.innerHTML = '<i class="ph ph-magic-wand"></i> Auto Remove Logo';
             }
@@ -1610,17 +1749,20 @@ Craft. Time. And a story worth savoring."></textarea>
                     
                     if (job.status === 'completed') {
                         const downloadUrl = `/api/download/${jobId}`;
+                        const isVideo = job.result_path && job.result_path.endsWith('.mp4');
                         
-                        html += `
-                            <div style="margin-top: 1.5rem; background: var(--surface-light); border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color);">
-                                <video controls src="${downloadUrl}" style="width: 100%; max-height: 400px; background: #000; display: block;"></video>
-                                <div style="padding: 1rem; display: flex; align-items: center; gap: 1rem;">
-                                    <a href="${downloadUrl}" download class="btn btn-primary" style="flex: 1; justify-content: center; text-decoration: none;">
-                                        <i class="ph ph-download-simple"></i> Download Video
-                                    </a>
+                        if (isVideo) {
+                            html += `
+                                <div style="margin-top: 1.5rem; background: var(--surface-light); border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color);">
+                                    <video controls src="${downloadUrl}" style="width: 100%; max-height: 400px; background: #000; display: block;"></video>
+                                    <div style="padding: 1rem; display: flex; align-items: center; gap: 1rem;">
+                                        <a href="${downloadUrl}" download class="btn btn-primary" style="flex: 1; justify-content: center; text-decoration: none;">
+                                            <i class="ph ph-download-simple"></i> Download Video
+                                        </a>
+                                    </div>
                                 </div>
-                            </div>
-                        `;
+                            `;
+                        }
                         
                         // Also handle multi-file results
                         if (job.result_files && job.result_files.length > 0) {
