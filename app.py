@@ -6,16 +6,24 @@ import logging
 import shutil
 import uuid
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, Response
 from fastapi.requests import Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
+from src.queue.tasks import enqueue_task
+from src.queue.job_store import (
+    create_job as create_job_record,
+    get_job as get_job_record,
+    update_job as update_job_record,
+    set_job_meta as set_job_meta_record,
+    get_job_meta as get_job_meta_record,
+)
 
 # Load environment variables
 load_dotenv()
@@ -27,8 +35,20 @@ logger = logging.getLogger(__name__)
 # Create directories
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "./uploads"))
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "./outputs"))
+try:
+    CLEANUP_MAX_AGE_HOURS = int(os.getenv("CLEANUP_MAX_AGE_HOURS", "24"))
+except ValueError:
+    CLEANUP_MAX_AGE_HOURS = 24
+try:
+    CLEANUP_INTERVAL_HOURS = int(os.getenv("CLEANUP_INTERVAL_HOURS", "24"))
+except ValueError:
+    CLEANUP_INTERVAL_HOURS = 24
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+# Default Whisper Prompt for better brand recognition
+# (Helps avoid mis-transcriptions like "Remember to attend" for "Belvedere 10")
+WHISPER_PROMPT = "Belvedere 10, Belvedere Vodka, Moët & Chandon, Hennessy, luxury spirit brands."
 
 # Initialize FastAPI
 app = FastAPI(
@@ -44,6 +64,9 @@ templates_dir = Path(__file__).parent / "templates"
 if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
+# Mount outputs for direct serving (enables Range requests/Seeking)
+app.mount("/api/outputs", StaticFiles(directory=str(OUTPUT_DIR)), name="outputs")
+
 # Cleanup Task
 @app.on_event("startup")
 async def schedule_periodic_cleanup():
@@ -55,14 +78,13 @@ async def schedule_periodic_cleanup():
         while True:
             try:
                 logger.info("Running scheduled cleanup...")
-                # Cleanup files older than 24h
-                cleanup_old_files(UPLOAD_DIR, max_age_hours=24)
-                cleanup_old_files(OUTPUT_DIR, max_age_hours=24)
+                cleanup_old_files(UPLOAD_DIR, max_age_hours=CLEANUP_MAX_AGE_HOURS)
+                cleanup_old_files(OUTPUT_DIR, max_age_hours=CLEANUP_MAX_AGE_HOURS)
             except Exception as e:
                 logger.error(f"Cleanup failed: {e}")
             
-            # Wait for 24h (86400 seconds)
-            await asyncio.sleep(86400)
+            interval_seconds = max(CLEANUP_INTERVAL_HOURS, 1) * 3600
+            await asyncio.sleep(interval_seconds)
     
     asyncio.create_task(cleanup_loop())
 
@@ -83,8 +105,9 @@ class JobStatus(BaseModel):
     status: str  # pending, processing, completed, failed
     progress: int = 0
     result_path: Optional[str] = None
-    result_files: List[ResultFile] = []
+    result_files: List[ResultFile] = Field(default_factory=list)
     error: Optional[str] = None
+    message: Optional[str] = None
     created_at: str
     completed_at: Optional[str] = None
 
@@ -100,21 +123,76 @@ class LegalRequest(BaseModel):
     media_type: str = "social"
     usage_type: str = "shareable"
     auto_position: bool = True
+    sub_type: Optional[str] = "reels"  # stories or reels
 
 
-# ============ Job Storage (in-memory) ============
+# ============ Job Storage (Redis) ============
 
-jobs = {}
+def _normalize_job_updates(kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    normalized = {}
+    for key, value in kwargs.items():
+        if key == "result_files" and isinstance(value, list):
+            normalized[key] = [
+                item.model_dump() if isinstance(item, ResultFile) else item
+                for item in value
+            ]
+        else:
+            normalized[key] = value
+    return normalized
+
+
+def create_job(job_id: str, status: str = "pending", **kwargs) -> None:
+    payload = JobStatus(
+        job_id=job_id,
+        status=status,
+        created_at=datetime.now().isoformat(),
+        **kwargs,
+    ).model_dump()
+    try:
+        create_job_record(job_id, payload)
+    except Exception as e:
+        logger.error(f"Redis unavailable while creating job {job_id}: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail="Queue/Redis is unavailable. Please start Redis or set REDIS_URL correctly.",
+        )
 
 
 def get_job(job_id: str) -> Optional[JobStatus]:
-    return jobs.get(job_id)
+    try:
+        raw = get_job_record(job_id)
+    except Exception as e:
+        logger.error(f"Redis unavailable while reading job {job_id}: {e}")
+        return None
+    if not raw:
+        return None
+    try:
+        return JobStatus(**raw)
+    except Exception:
+        logger.warning(f"Malformed job payload in Redis for job_id={job_id}")
+        return None
 
 
 def update_job(job_id: str, **kwargs):
-    if job_id in jobs:
-        for key, value in kwargs.items():
-            setattr(jobs[job_id], key, value)
+    try:
+        update_job_record(job_id, _normalize_job_updates(kwargs))
+    except Exception as e:
+        logger.error(f"Redis unavailable while updating job {job_id}: {e}")
+
+
+def set_job_meta(job_id: str, key: str, value: Any) -> None:
+    try:
+        set_job_meta_record(job_id, key, value)
+    except Exception as e:
+        logger.error(f"Redis unavailable while setting job meta ({job_id}/{key}): {e}")
+
+
+def get_job_meta(job_id: str, key: str, default: Any = None) -> Any:
+    try:
+        return get_job_meta_record(job_id, key, default)
+    except Exception as e:
+        logger.error(f"Redis unavailable while getting job meta ({job_id}/{key}): {e}")
+        return default
 
 
 # ============ Helper Functions ============
@@ -148,16 +226,25 @@ def save_upload(file: UploadFile, prefix: str = "") -> Path:
     file_size = os.path.getsize(filepath)
     logger.info(f"Saved upload: {filepath} (Size: {file_size} bytes, Content-Type: {file.content_type}, Original: {file.filename})")
     
+    if file_size == 0:
+        if filepath.exists():
+            filepath.unlink()  # Delete empty file
+        raise HTTPException(status_code=400, detail="Uploaded file is empty. Please check your video file and try again.")
+        
     return filepath
 
 
 # ============ Background Tasks ============
 
 LANG_NAMES = {
-    "en": "English", "vi": "Vietnamese", "fr": "French",
-    "zh": "Chinese", "ja": "Japanese", "ko": "Korean",
-    "de": "German", "es": "Spanish", "pt": "Portuguese",
-    "it": "Italian", "th": "Thai", "id": "Indonesian"
+    "en": "US English",
+    "uk": "UK English",
+    "de": "German",
+    "it": "Italian",
+    "fr": "French",
+    "es": "Spanish",
+    "nl": "Dutch",
+    "ja": "Japanese"
 }
 
 
@@ -224,6 +311,44 @@ def generate_srt(aligned, output_path):
     return output_path
 
 
+def enqueue_app_job(task_name: str, job_id: str, *args, **kwargs) -> None:
+    try:
+        enqueue_task(task_name, *args, job_id=job_id, **kwargs)
+    except Exception as e:
+        logger.error(f"Failed to enqueue task '{task_name}' for job {job_id}: {e}")
+        update_job(job_id, status="failed", error=f"Queue unavailable: {e}")
+        raise HTTPException(status_code=503, detail="Queue service unavailable")
+
+
+def serialize_scene(scene: Any) -> Dict[str, Any]:
+    return {
+        "start_time": float(getattr(scene, "start_time", 0.0)),
+        "end_time": float(getattr(scene, "end_time", 0.0)),
+        "start_frame": int(getattr(scene, "start_frame", 0)),
+        "end_frame": int(getattr(scene, "end_frame", 0)),
+        "scene_type": str(getattr(scene, "scene_type", "unknown")),
+        "keyframe_path": str(getattr(scene, "keyframe_path", "")),
+    }
+
+
+def deserialize_scenes(scenes_data: List[Dict[str, Any]]):
+    from src.mastering.scene_detection import Scene
+
+    scenes = []
+    for item in scenes_data:
+        scenes.append(
+            Scene(
+                start_time=float(item.get("start_time", 0.0)),
+                end_time=float(item.get("end_time", 0.0)),
+                start_frame=int(item.get("start_frame", 0)),
+                end_frame=int(item.get("end_frame", 0)),
+                scene_type=str(item.get("scene_type", "unknown")),
+                keyframe_path=str(item.get("keyframe_path", "")),
+            )
+        )
+    return scenes
+
+
 async def process_subtitles(
     job_id: str,
     video_path: str,
@@ -231,11 +356,12 @@ async def process_subtitles(
     target_langs: List[str],
     video_format: str,
     export_video: bool = True,
-    export_srt: bool = True
+    export_srt: bool = True,
+    export_format: str = "mp4_standard"
 ):
     """Background task để xử lý phụ đề đa ngôn ngữ"""
     try:
-        update_job(job_id, status="processing", progress=5)
+        update_job(job_id, status="processing", progress=5, message="Initializing...")
         
         from src.subtitle.renderer import SubtitleRenderer
         from src.subtitle.timing_sync import TimingSync, extract_audio
@@ -244,12 +370,12 @@ async def process_subtitles(
         result_files = []
         
         # 1. Trích xuất audio
-        update_job(job_id, progress=10)
+        update_job(job_id, progress=10, message="Extracting audio from video...")
         audio_path = extract_audio(video_path)
         
         # 2. Whisper transcribe
-        update_job(job_id, progress=20)
-        transcript = sync.transcribe(audio_path, source_lang)
+        update_job(job_id, progress=20, message="AI is transcribing speech (Whisper)...")
+        transcript, source_lang = sync.transcribe(audio_path, source_lang, prompt=WHISPER_PROMPT)
         
         if not transcript:
             raise ValueError("Không nhận diện được lời thoại trong video")
@@ -269,7 +395,7 @@ async def process_subtitles(
         for i, lang in enumerate(target_langs):
             lang_name = LANG_NAMES.get(lang, lang)
             progress = 30 + int((i / total_langs) * 60)
-            update_job(job_id, progress=progress)
+            update_job(job_id, progress=progress, message=f"Processing language {lang_name} ({i+1}/{total_langs})...")
             
             # Dịch nếu khác ngôn ngữ gốc
             if lang == source_lang:
@@ -284,8 +410,9 @@ async def process_subtitles(
             # Export video với phụ đề
             if export_video:
                 try:
-                    # Tạo output path riêng cho từng ngôn ngữ để tránh overwrite
-                    output_filename = f"{Path(video_path).stem}_{lang}.mp4"
+                    # Chọn đuôi file phù hợp (ProRes cần .mov)
+                    ext = ".mov" if export_format == "prores" else ".mp4"
+                    output_filename = f"{Path(video_path).stem}_{lang}{ext}"
                     output_path = str(OUTPUT_DIR / output_filename)
                     
                     output_path = renderer.render(
@@ -293,7 +420,8 @@ async def process_subtitles(
                         aligned,
                         output_path,
                         language=lang,
-                        video_format=video_format
+                        video_format=video_format,
+                        export_format=export_format
                     )
                     result_files.append(ResultFile(
                         path=output_path,
@@ -340,11 +468,12 @@ async def process_legal(
     usage_type: str,
     auto_position: bool,
     position: Optional[str] = None,
-    auto_detect_product: bool = True
+    auto_detect_product: bool = True,
+    sub_type: Optional[str] = "reels"
 ):
     """Background task để thêm nội dung pháp lý"""
     try:
-        update_job(job_id, status="processing", progress=10)
+        update_job(job_id, status="processing", progress=5, message="Initializing legal processing...")
         
         from src.legal.overlay import LegalOverlay
         from src.legal.database import MediaType, UsageType
@@ -361,11 +490,11 @@ async def process_legal(
             except Exception as e:
                 logger.error(f"Product detection failed: {e}")
             
-        update_job(job_id, progress=30)
+        update_job(job_id, progress=40, message=f"Applying legal rules: {country_code} ({media_type})...")
         
         overlay = LegalOverlay(str(OUTPUT_DIR))
         
-        update_job(job_id, progress=50)
+        update_job(job_id, progress=60, message="Running FFmpeg to overlay legal text and logos...")
         
         output_path = overlay.add_legal_content(
             video_path,
@@ -374,7 +503,8 @@ async def process_legal(
             UsageType(usage_type),
             auto_detect_position=auto_position,
             product_type=product_type,
-            manual_position=position
+            manual_position=position,
+            sub_type=sub_type
         )
         
         update_job(
@@ -387,6 +517,421 @@ async def process_legal(
         
     except Exception as e:
         logger.error(f"Job {job_id} failed: {e}")
+        update_job(job_id, status="failed", error=str(e))
+
+
+def process_replace_logo_job(
+    job_id: str,
+    video_path: str,
+    logo_path: str,
+    x: Optional[int] = None,
+    y: Optional[int] = None,
+):
+    try:
+        update_job(job_id, status="processing", progress=30)
+
+        from src.mastering.element_replacer import ElementReplacer
+
+        replacer = ElementReplacer(str(OUTPUT_DIR))
+        position = (x, y) if x is not None and y is not None else None
+        output_path = replacer.replace_logo(
+            str(video_path),
+            str(logo_path),
+            position=position,
+        )
+        update_job(
+            job_id,
+            status="completed",
+            progress=100,
+            result_path=output_path,
+            completed_at=datetime.now().isoformat(),
+        )
+    except Exception as e:
+        update_job(job_id, status="failed", error=str(e))
+
+
+def process_add_packshot_job(
+    job_id: str,
+    video_path: str,
+    packshot_path: str,
+    position: str = "center",
+    duration: float = 2.0,
+):
+    try:
+        update_job(job_id, status="processing", progress=30)
+
+        from src.mastering.element_replacer import ElementReplacer
+
+        replacer = ElementReplacer(str(OUTPUT_DIR))
+        output_path = replacer.add_packshot(
+            str(video_path),
+            str(packshot_path),
+            position=position,
+            duration=duration,
+        )
+        update_job(
+            job_id,
+            status="completed",
+            progress=100,
+            result_path=output_path,
+            completed_at=datetime.now().isoformat(),
+        )
+    except Exception as e:
+        update_job(job_id, status="failed", error=str(e))
+
+
+def process_analyze_scenes_job(job_id: str, video_path: str):
+    try:
+        update_job(job_id, status="processing", progress=10, message="Starting scene analysis...")
+
+        from src.mastering.scene_detection import SceneDetector
+
+        detector = SceneDetector(output_dir=str(OUTPUT_DIR / "scenes" / job_id))
+        compatible_path = detector.ensure_compatible_video(str(video_path))
+        update_job(job_id, progress=20)
+
+        scenes = detector.detect_scenes(compatible_path)
+        update_job(job_id, progress=50)
+
+        detector.classify_scenes(scenes, video_path=compatible_path)
+        update_job(job_id, progress=90)
+
+        scene_data = []
+        serialized_scenes = []
+        for i, s in enumerate(scenes):
+            serialized = serialize_scene(s)
+            serialized_scenes.append(serialized)
+
+            kf_url = ""
+            if serialized["keyframe_path"] and os.path.exists(serialized["keyframe_path"]):
+                kf_url = f"/api/master/keyframe/{job_id}/{i}"
+            scene_data.append(
+                {
+                    "index": i,
+                    "start_time": round(serialized["start_time"], 2),
+                    "end_time": round(serialized["end_time"], 2),
+                    "duration": round(serialized["end_time"] - serialized["start_time"], 2),
+                    "scene_type": serialized["scene_type"],
+                    "keyframe_url": kf_url,
+                }
+            )
+
+        set_job_meta(job_id, "scenes", serialized_scenes)
+        set_job_meta(job_id, "video_path", compatible_path)
+        set_job_meta(job_id, "scene_data", scene_data)
+
+        update_job(
+            job_id,
+            status="completed",
+            progress=100,
+            result_path=str(OUTPUT_DIR / "scenes" / job_id),
+            completed_at=datetime.now().isoformat(),
+        )
+    except Exception as e:
+        logger.error(f"Scene analysis failed: {e}")
+        import traceback
+        traceback.print_exc()
+        update_job(job_id, status="failed", error=str(e))
+
+
+def process_smart_cut_job(
+    job_id: str,
+    scenes_data: List[Dict[str, Any]],
+    video_path: str,
+    remove_intro: bool = True,
+    remove_outro: bool = True,
+    remove_logo: bool = False,
+    remove_product: bool = False,
+):
+    try:
+        update_job(job_id, status="processing", progress=20, message="Analyzing cut segments...")
+
+        from src.mastering.smart_cut import SmartCutter
+
+        scenes = deserialize_scenes(scenes_data)
+        cutter = SmartCutter(output_dir=str(OUTPUT_DIR / "cuts"))
+        keep_segments = cutter.generate_cut_list(
+            scenes,
+            remove_intro=remove_intro,
+            remove_outro=remove_outro,
+            remove_product=remove_product,
+            remove_logo=remove_logo,
+        )
+        update_job(job_id, progress=40, message="Rendering trimmed video...")
+
+        output_filename = f"smartcut_{job_id}.mp4"
+        output_path = cutter.render_video(video_path, keep_segments, output_filename)
+
+        update_job(
+            job_id,
+            status="completed",
+            progress=100,
+            result_path=output_path,
+            completed_at=datetime.now().isoformat(),
+        )
+    except Exception as e:
+        logger.error(f"Smart cut failed: {e}")
+        import traceback
+        traceback.print_exc()
+        update_job(job_id, status="failed", error=str(e))
+
+
+def process_logo_auto_remove_job(
+    job_id: str,
+    scenes_data: List[Dict[str, Any]],
+    video_path: str,
+    mask_path: Optional[str] = None,
+):
+    try:
+        update_job(job_id, status="processing", progress=10, message="Initializing logo removal...")
+
+        from src.mastering.logo_removal import LogoRemovalService
+        from src.mastering.inpainting import InpaintingService
+
+        logo_service = LogoRemovalService(output_dir=str(OUTPUT_DIR / "logo_removal"))
+        inpaint_service = InpaintingService(output_dir=str(OUTPUT_DIR / "inpaint"))
+        scenes = deserialize_scenes(scenes_data)
+
+        update_job(job_id, progress=20, message="Detecting logo with AI...")
+        result = logo_service.auto_remove_logo(
+            video_path=video_path,
+            scenes=scenes,
+            output_name=f"logo_removed_{job_id}.mp4",
+            mask_path=mask_path,
+            inpainting_service=inpaint_service,
+        )
+
+        if result.get("status") == "success":
+            update_job(
+                job_id,
+                status="completed",
+                progress=100,
+                message="Completed!",
+                result_path=result["output_path"],
+                completed_at=datetime.now().isoformat(),
+            )
+        else:
+            update_job(
+                job_id,
+                status="completed",
+                progress=100,
+                result_path=video_path,
+                completed_at=datetime.now().isoformat(),
+            )
+    except Exception as e:
+        logger.error(f"Logo removal failed: {e}")
+        import traceback
+        traceback.print_exc()
+        update_job(job_id, status="failed", error=str(e))
+
+
+def process_inpaint_video_job(job_id: str, video_path: str, mask_path: str):
+    try:
+        from src.mastering.inpainting import InpaintingService
+        from src.mastering.scene_detection import SceneDetector
+
+        detector = SceneDetector()
+        compatible_path = detector.ensure_compatible_video(video_path)
+        service = InpaintingService(output_dir=str(OUTPUT_DIR / "inpaint"))
+        output_name = f"inpainted_{job_id}.mp4"
+
+        def update_progress(p):
+            update_job(job_id, progress=int(p), message=f"Processing: {int(p)}%")
+
+        service.inpaint_video(
+            str(compatible_path),
+            str(mask_path),
+            output_name=output_name,
+            progress_callback=update_progress,
+        )
+        update_job(
+            job_id,
+            status="completed",
+            progress=100,
+            message="Completed!",
+            result_path=str(OUTPUT_DIR / "inpaint" / output_name),
+            completed_at=datetime.now().isoformat(),
+        )
+    except Exception as e:
+        logger.error(f"Video inpainting failed: {e}")
+        import traceback
+        traceback.print_exc()
+        update_job(job_id, status="failed", error=str(e))
+
+
+def process_subtitle_batch_job(
+    job_id: str,
+    video_path: str,
+    lines: List[str],
+    source_lang: str,
+    targets: List[str],
+    video_format: str,
+):
+    try:
+        update_job(job_id, status="processing", progress=5)
+
+        from src.subtitle.translator import SubtitleTranslator
+        from src.subtitle.timing_sync import TimingSync, extract_audio
+        from src.subtitle.renderer import SubtitleRenderer
+        import zipfile
+
+        sync = TimingSync()
+        translator = SubtitleTranslator()
+        renderer = SubtitleRenderer(str(OUTPUT_DIR))
+
+        if len(lines) == 1 and len(lines[0]) > 100:
+            update_job(job_id, progress=10)
+            subtitle_lines = sync.segment_long_text(lines[0], source_lang, 80, True)
+        else:
+            subtitle_lines = lines
+
+        update_job(job_id, progress=20)
+        try:
+            audio_path = extract_audio(str(video_path))
+            update_job(job_id, progress=30)
+            transcript, source_lang = sync.transcribe(audio_path, source_lang)
+            aligned = sync.align_subtitles(subtitle_lines, transcript)
+        except Exception as e:
+            logger.warning(f"Timing failed: {e}, using fallback")
+            aligned = [(i * 3, (i + 1) * 3, t) for i, t in enumerate(subtitle_lines)]
+
+        update_job(job_id, progress=40)
+        output_files = []
+        total_langs = len(targets)
+
+        for idx, target_lang in enumerate(targets):
+            lang_progress = 40 + int(50 * (idx / total_langs))
+            update_job(job_id, progress=lang_progress)
+
+            if target_lang != source_lang:
+                translated_aligned = translator.translate_with_timing(
+                    aligned, source_lang, target_lang
+                )
+            else:
+                translated_aligned = aligned
+
+            translated_aligned = [
+                (start, end, sync.smart_line_break(text))
+                for start, end, text in translated_aligned
+            ]
+
+            output_path = renderer.render(
+                str(video_path),
+                translated_aligned,
+                language=target_lang,
+                video_format=video_format,
+                export_format="mp4_standard",
+            )
+
+            new_path = output_path.replace("_subtitled.mp4", f"_{target_lang}.mp4")
+            if output_path != new_path:
+                shutil.move(output_path, new_path)
+                output_path = new_path
+
+            output_files.append((target_lang, output_path))
+            logger.info(f"Generated {target_lang} version: {output_path}")
+
+        update_job(job_id, progress=90, message="Finalizing and packaging output...")
+        if len(output_files) > 1:
+            zip_path = str(OUTPUT_DIR / f"batch_{job_id}.zip")
+            with zipfile.ZipFile(zip_path, "w") as zf:
+                for _, path in output_files:
+                    zf.write(path, Path(path).name)
+            result_path = zip_path
+        else:
+            result_path = output_files[0][1]
+
+        update_job(
+            job_id,
+            status="completed",
+            progress=100,
+            result_path=result_path,
+            completed_at=datetime.now().isoformat(),
+        )
+    except Exception as e:
+        logger.error(f"Batch job {job_id} failed: {e}")
+        update_job(job_id, status="failed", error=str(e))
+
+
+def process_subtitle_export_job(
+    job_id: str,
+    video_path: str,
+    lines: List[str],
+    language: str,
+    export_format: str,
+    translate_langs: List[str],
+):
+    try:
+        update_job(job_id, status="processing", progress=5)
+
+        from src.subtitle.timing_sync import TimingSync, extract_audio
+        from src.subtitle.exporter import SubtitleExporter
+        from src.subtitle.translator import SubtitleTranslator
+        import zipfile
+
+        sync = TimingSync()
+        exporter = SubtitleExporter(str(OUTPUT_DIR))
+
+        if len(lines) == 1 and len(lines[0]) > 100:
+            subtitle_lines = sync.segment_long_text(lines[0], language, 80, True)
+        else:
+            subtitle_lines = lines
+
+        update_job(job_id, progress=20)
+        try:
+            audio_path = extract_audio(str(video_path))
+            update_job(job_id, progress=40, message="Aligning subtitle timing...")
+            transcript, language = sync.transcribe(audio_path, language)
+            aligned = sync.align_subtitles(subtitle_lines, transcript)
+        except Exception as e:
+            logger.warning(f"Timing failed: {e}, using fallback")
+            aligned = [(i * 3, (i + 1) * 3, t) for i, t in enumerate(subtitle_lines)]
+
+        aligned = [(start, end, sync.smart_line_break(text)) for start, end, text in aligned]
+        update_job(job_id, progress=60)
+
+        output_files = []
+        base_name = Path(video_path).stem
+        if export_format in ["srt", "both"]:
+            output_files.append(exporter.export_srt(aligned, f"{base_name}_{language}"))
+        if export_format in ["ass", "both"]:
+            output_files.append(exporter.export_ass(aligned, f"{base_name}_{language}"))
+
+        if translate_langs:
+            translator = SubtitleTranslator()
+            for target_lang in translate_langs:
+                if target_lang != language:
+                    translated_aligned = translator.translate_with_timing(
+                        aligned, language, target_lang
+                    )
+                    if export_format in ["srt", "both"]:
+                        output_files.append(
+                            exporter.export_srt(translated_aligned, f"{base_name}_{target_lang}")
+                        )
+                    if export_format in ["ass", "both"]:
+                        output_files.append(
+                            exporter.export_ass(translated_aligned, f"{base_name}_{target_lang}")
+                        )
+
+        update_job(job_id, progress=90)
+        if len(output_files) > 1:
+            zip_path = str(OUTPUT_DIR / f"subtitles_{job_id}.zip")
+            with zipfile.ZipFile(zip_path, "w") as zf:
+                for path in output_files:
+                    zf.write(path, Path(path).name)
+            result_path = zip_path
+        else:
+            result_path = output_files[0]
+
+        update_job(
+            job_id,
+            status="completed",
+            progress=100,
+            result_path=result_path,
+            completed_at=datetime.now().isoformat(),
+        )
+    except Exception as e:
+        logger.error(f"Export job {job_id} failed: {e}")
         update_job(job_id, status="failed", error=str(e))
 
 
@@ -408,6 +953,12 @@ async def home(request: Request):
     """)
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    """Suppress favicon 404 when no icon is configured."""
+    return Response(status_code=204)
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
@@ -416,44 +967,41 @@ async def health_check():
 
 @app.post("/api/subtitle")
 async def add_subtitle(
-    background_tasks: BackgroundTasks,
     video: UploadFile = File(...),
-    source_language: str = Form("en"),
-    video_format: str = Form("16x9"),
+    source_lang: str = Form("en"),
     target_languages: str = Form("en"),
+    video_format: str = Form("16x9"),
     export_video: bool = Form(True),
-    export_srt: bool = Form(True)
+    export_srt: bool = Form(False),
+    export_format: str = Form("mp4_standard")
 ):
     """
     Thêm phụ đề đa ngôn ngữ vào video bằng AI
     """
-    logger.info(f"Received add_subtitle request: source={source_language}, targets={target_languages}, export_video={export_video}, export_srt={export_srt}")
+    logger.info(f"Received add_subtitle request: source={source_lang}, targets={target_languages}, export_video={export_video}, export_srt={export_srt}")
     
     video_path = save_upload(video, "video_")
     
     # Parse target languages
     langs = [l.strip() for l in target_languages.split(",") if l.strip()]
     if not langs:
-        langs = [source_language]
+        langs = [source_lang]
     
     logger.info(f"Parsed languages: {langs}")
     
     job_id = uuid.uuid4().hex
-    jobs[job_id] = JobStatus(
-        job_id=job_id,
-        status="pending",
-        created_at=datetime.now().isoformat()
-    )
-    
-    background_tasks.add_task(
-        process_subtitles,
+    create_job(job_id, status="pending")
+    enqueue_app_job(
+        "process_subtitles",
+        job_id,
         job_id,
         str(video_path),
-        source_language,
+        source_lang,
         langs,
         video_format,
         export_video,
-        export_srt
+        export_srt,
+        export_format,
     )
     
     lang_names = [LANG_NAMES.get(l, l) for l in langs]
@@ -469,7 +1017,10 @@ async def process_subtitles_from_text(
     video_format: str,
     export_video: bool = True,
     export_srt: bool = True,
-    raw_text: Optional[str] = None
+    export_format: str = "mp4_standard",
+    raw_text: Optional[str] = None,
+    auto_segment_rhythm: bool = True,
+    manual_translations: Optional[Dict[str, List[str]]] = None
 ):
     """Background task để xử lý phụ đề từ text trực tiếp (đa ngôn ngữ)"""
     try:
@@ -484,10 +1035,10 @@ async def process_subtitles_from_text(
         sync = TimingSync()
         result_files = []
         
-        # Nếu có raw_text (1 đoạn dài), dùng AI ngắt câu trước
-        if raw_text and not subtitle_lines:
-            update_job(job_id, progress=10)
-            logger.info(f"Segmenting long text ({len(raw_text)} chars) with AI...")
+        # Nếu có raw_text (1 đoạn dài) và không yêu cầu ngắt theo nhịp điệu (hoặc fallback)
+        if raw_text and not subtitle_lines and not auto_segment_rhythm:
+            update_job(job_id, progress=10, message="AI is segmenting static text...")
+            logger.info(f"Segmenting long text ({len(raw_text)} chars) with AI (static)...")
             
             subtitle_lines = sync.segment_long_text(
                 raw_text,
@@ -495,7 +1046,7 @@ async def process_subtitles_from_text(
                 max_chars=80,
                 use_ai=True
             )
-            logger.info(f"AI created {len(subtitle_lines)} subtitle segments")
+            logger.info(f"AI created {len(subtitle_lines)} subtitle segments (static)")
         
         if not subtitle_lines:
             raise ValueError("Không có phụ đề nào được tạo")
@@ -505,30 +1056,37 @@ async def process_subtitles_from_text(
         try:
             # Trích xuất audio từ video
             audio_path = extract_audio(video_path)
-            update_job(job_id, progress=35)
+            update_job(job_id, progress=35, message="AI is analyzing audio...")
             
             # Dùng Whisper transcribe để lấy timing
-            transcript = sync.transcribe(audio_path, source_lang)
-            update_job(job_id, progress=55)
+            transcript, source_lang = sync.transcribe(audio_path, source_lang, prompt=WHISPER_PROMPT)
+            update_job(job_id, progress=55, message="AI is aligning text with speech rhythm...")
             
-            # Căn timing phụ đề theo transcript
-            aligned_source = sync.align_subtitles(subtitle_lines, transcript)
+            if auto_segment_rhythm and raw_text:
+                # Rhythm-aware alignment: chia nhỏ raw_text theo transcript
+                logger.info("Using rhythm-aware alignment for long text")
+                aligned_source = sync.align_long_text_to_transcript(raw_text, transcript, source_lang)
+            else:
+                # Căn timing phụ đề (đã được chia sẵn) theo transcript
+                if not subtitle_lines:
+                    subtitle_lines = [raw_text] if raw_text else [""]
+                aligned_source = sync.align_subtitles(subtitle_lines, transcript)
             
-            # Áp dụng ngắt dòng thông minh cho mỗi segment
+            # Áp dụng ngắt dòng thông minh cho mỗi segment, giữ lại original_index
             aligned_source = [
-                (start, end, sync.smart_line_break(text))
-                for start, end, text in aligned_source
+                (start, end, sync.smart_line_break(text), original_idx)
+                for start, end, text, original_idx in aligned_source
             ]
             
         except Exception as e:
             logger.warning(f"AI timing failed: {e}, using fallback")
-            # Fallback: chia đều 3 giây mỗi phụ đề
+            # Fallback: chia đều 3 giây mỗi phụ đề, cũng cần original_index
             aligned_source = [
-                (i * 3, (i + 1) * 3, text)
+                (i * 3, (i + 1) * 3, text, i)
                 for i, text in enumerate(subtitle_lines)
             ]
         
-        update_job(job_id, progress=70)
+        update_job(job_id, progress=70, message="Starting output export...")
         
         # 4. Xử lý từng ngôn ngữ (tương tự như process_subtitles)
         total_langs = len(target_langs)
@@ -537,15 +1095,29 @@ async def process_subtitles_from_text(
         for i, lang in enumerate(target_langs):
             lang_name = LANG_NAMES.get(lang, lang)
             progress = 70 + int((i / total_langs) * 20)
-            update_job(job_id, progress=progress)
+            update_job(job_id, progress=progress, message=f"Rendering output for {lang_name}...")
             
-            # Dịch nếu khác ngôn ngữ gốc
+            # Dịch hoặc dùng bản dịch thủ công
             if lang == source_lang:
-                aligned = aligned_source
+                # Strip index for renderer compatibility
+                aligned = [(s, e, t) for s, e, t, idx in aligned_source]
+            elif manual_translations and lang in manual_translations:
+                logger.info(f"Using manual translation for {lang} with index mapping...")
+                m_texts = manual_translations[lang]
+                
+                # Use the original_idx to pick the correct translation from m_texts
+                aligned = []
+                for start, end, _, original_idx in aligned_source:
+                    trans_text = ""
+                    if 0 <= original_idx < len(m_texts):
+                        trans_text = m_texts[original_idx].strip()
+                    aligned.append((start, end, trans_text))
             else:
                 try:
                     logger.info(f"Translating subtitles from {source_lang} to {lang}...")
-                    aligned = translate_subtitles_gpt(aligned_source, source_lang, lang)
+                    # translate_subtitles_gpt expects (start, end, text) so strip index
+                    source_for_trans = [(s, e, t) for s, e, t, idx in aligned_source]
+                    aligned = translate_subtitles_gpt(source_for_trans, source_lang, lang)
                     logger.info(f"Translation to {lang} completed.")
                 except Exception as e:
                     logger.warning(f"Translation to {lang} failed: {e}")
@@ -556,8 +1128,9 @@ async def process_subtitles_from_text(
                 try:
                     logger.info(f"Rendering video for {lang}...")
                     
-                    # Tạo output path riêng cho từng ngôn ngữ
-                    output_filename = f"{Path(video_path).stem}_{lang}.mp4"
+                    # Chọn đuôi file phù hợp (ProRes cần .mov)
+                    ext = ".mov" if export_format == "prores" else ".mp4"
+                    output_filename = f"{Path(video_path).stem}_{lang}{ext}"
                     output_path = str(OUTPUT_DIR / output_filename)
                     
                     output_path = renderer.render(
@@ -565,7 +1138,8 @@ async def process_subtitles_from_text(
                         aligned,
                         output_path,
                         language=lang,
-                        video_format=video_format
+                        video_format=video_format,
+                        export_format=export_format
                     )
                     result_files.append(ResultFile(
                         path=output_path,
@@ -609,32 +1183,73 @@ async def process_subtitles_from_text(
         update_job(job_id, status="failed", error=str(e))
 
 
+@app.post("/api/parse-translation-excel")
+async def parse_translation_excel(file: UploadFile = File(...)):
+    """
+    Parse an Excel file containing horizontal translations (EN, FR, SP, etc.)
+    Returns JSON rows for the frontend table.
+    """
+    try:
+        from src.subtitle.excel_reader import ExcelReader
+        
+        # Save temp file
+        ext = Path(file.filename).suffix
+        temp_path = UPLOAD_DIR / f"temp_trans_{uuid.uuid4().hex}{ext}"
+        with open(temp_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+            
+        reader = ExcelReader(str(temp_path))
+        rows = reader.parse_horizontal_translations()
+        
+        # Cleanup temp file
+        if temp_path.exists():
+            temp_path.unlink()
+            
+        return {"rows": rows}
+    except Exception as e:
+        logger.error(f"Failed to parse translation excel: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to parse Excel: {str(e)}")
+
+
 @app.post("/api/subtitle-text")
 async def add_subtitle_from_text(
-    background_tasks: BackgroundTasks,
     video: UploadFile = File(...),
-    subtitle_text: str = Form(...),
-    source_language: str = Form("en"),
+    subtitle_text: str = Form(""), # Make optional if JSON is provided
+    source_lang: str = Form("en"),
     video_format: str = Form("16x9"),
     target_languages: str = Form("en"),
     export_video: bool = Form(True),
     export_srt: bool = Form(True),
-    auto_segment: bool = Form(True)
+    export_format: str = Form("mp4_standard"),
+    auto_segment: bool = Form(True),
+    auto_segment_rhythm: bool = Form(True),
+    manual_translations_json: Optional[str] = Form(None)
 ):
     """
     Thêm phụ đề vào video từ text nhập trực tiếp (đa ngôn ngữ)
     """
-    logger.info(f"Received add_subtitle_from_text request: source={source_language}, targets={target_languages}")
+    logger.info(f"Received add_subtitle_from_text request: source={source_lang}, targets={target_languages}")
+
+    manual_trans = None
+    if manual_translations_json:
+        try:
+            import json
+            manual_trans = json.loads(manual_translations_json)
+            # Nếu có manual_trans, source_text thường là cột đầu tiên (ví dụ 'en')
+            if not subtitle_text and 'en' in manual_trans:
+                subtitle_text = "\n".join(manual_trans['en'])
+        except Exception as e:
+            logger.error(f"Failed to parse manual_translations_json: {e}")
 
     text = subtitle_text.strip()
     
-    if not text:
-        raise HTTPException(status_code=400, detail="Không có phụ đề nào được nhập")
+    if not text and not manual_trans:
+        raise HTTPException(status_code=400, detail="Không có phụ đề nào được nhập hoặc upload")
     
     # Parse target languages
     langs = [l.strip() for l in target_languages.split(",") if l.strip()]
     if not langs:
-        langs = [source_language]
+        langs = [source_lang]
     
     # Kiểm tra nếu là nhiều dòng hay 1 đoạn dài
     lines = [l.strip() for l in text.split('\n') if l.strip()]
@@ -653,23 +1268,22 @@ async def add_subtitle_from_text(
     
     # Create job
     job_id = uuid.uuid4().hex
-    jobs[job_id] = JobStatus(
-        job_id=job_id,
-        status="pending",
-        created_at=datetime.now().isoformat()
-    )
-    
-    background_tasks.add_task(
-        process_subtitles_from_text,
+    create_job(job_id, status="pending")
+    enqueue_app_job(
+        "process_subtitles_from_text",
+        job_id,
         job_id,
         str(video_path),
         subtitle_lines,
-        source_language,
+        source_lang,
         langs,
         video_format,
         export_video,
         export_srt,
-        raw_text  # Pass raw text for AI segmentation
+        export_format,
+        raw_text,
+        auto_segment_rhythm,
+        manual_trans,
     )
     
     lang_names = [LANG_NAMES.get(l, l) for l in langs]
@@ -681,14 +1295,14 @@ async def add_subtitle_from_text(
 
 @app.post("/api/legal")
 async def add_legal_content(
-    background_tasks: BackgroundTasks,
     video: UploadFile = File(...),
     country_code: str = Form(...),
     media_type: str = Form("social"),
     usage_type: str = Form("shareable"),
     auto_position: bool = Form(True),
     position: Optional[str] = Form(None),
-    auto_detect_product: bool = Form(True)
+    auto_detect_product: bool = Form(False),
+    sub_type: Optional[str] = Form("reels")
 ):
     """
     Thêm nội dung pháp lý vào video
@@ -704,14 +1318,10 @@ async def add_legal_content(
     video_path = save_upload(video, "video_")
     
     job_id = uuid.uuid4().hex
-    jobs[job_id] = JobStatus(
-        job_id=job_id,
-        status="pending",
-        created_at=datetime.now().isoformat()
-    )
-    
-    background_tasks.add_task(
-        process_legal,
+    create_job(job_id, status="pending")
+    enqueue_app_job(
+        "process_legal",
+        job_id,
         job_id,
         str(video_path),
         country_code.upper(),
@@ -719,57 +1329,11 @@ async def add_legal_content(
         usage_type,
         auto_position,
         position,
-        auto_detect_product
+        auto_detect_product,
+        sub_type,
     )
     
     return {"job_id": job_id, "message": "Processing started"}
-
-
-@app.post("/api/legal-image")
-async def add_legal_image(
-    image: UploadFile = File(...),
-    country_code: str = Form(...),
-    position: str = Form("bottom_left"),
-    auto_detect: bool = Form(False)
-):
-    """
-    Thêm nội dung pháp lý vào ảnh tĩnh (print, cover, banner)
-    
-    - **image**: File ảnh (jpg, png)
-    - **country_code**: Mã quốc gia (VN, FR, US, HK)
-    - **position**: Vị trí (bottom_left, bottom_right, bottom_center, top_left, top_right)
-    - **auto_detect**: Tự động phát hiện loại sản phẩm bằng CLIP
-    """
-    from src.legal.image_overlay import ImageLegalOverlay
-    from src.legal.database import MediaType, UsageType
-    
-    # Validate file type
-    if not image.content_type.startswith('image/'):
-        raise HTTPException(status_code=400, detail="File phải là ảnh (jpg, png)")
-    
-    # Save uploaded image
-    image_path = save_upload(image, "image_")
-    
-    try:
-        overlay = ImageLegalOverlay(str(OUTPUT_DIR))
-        output_path = overlay.add_legal_content(
-            str(image_path),
-            country_code.upper(),
-            MediaType.PRINT,
-            UsageType.PAID,
-            position=position,
-            auto_detect_product=auto_detect
-        )
-        
-        return FileResponse(
-            output_path,
-            media_type="image/jpeg",
-            filename=f"legal_{country_code}_{Path(output_path).name}"
-        )
-        
-    except Exception as e:
-        logger.error(f"Image legal failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/detect-product")
@@ -814,7 +1378,6 @@ async def detect_product(
 
 @app.post("/api/master/replace-logo")
 async def replace_logo(
-    background_tasks: BackgroundTasks,
     video: UploadFile = File(...),
     logo: UploadFile = File(...),
     x: Optional[int] = Form(None),
@@ -825,44 +1388,21 @@ async def replace_logo(
     logo_path = save_upload(logo, "logo_")
     
     job_id = uuid.uuid4().hex
-    jobs[job_id] = JobStatus(
-        job_id=job_id,
-        status="pending",
-        created_at=datetime.now().isoformat()
+    create_job(job_id, status="pending")
+    enqueue_app_job(
+        "process_replace_logo_job",
+        job_id,
+        job_id,
+        str(video_path),
+        str(logo_path),
+        x,
+        y,
     )
-    
-    async def process():
-        try:
-            update_job(job_id, status="processing", progress=30)
-            
-            from src.mastering.element_replacer import ElementReplacer
-            replacer = ElementReplacer(str(OUTPUT_DIR))
-            
-            position = (x, y) if x is not None and y is not None else None
-            
-            output_path = replacer.replace_logo(
-                str(video_path),
-                str(logo_path),
-                position=position
-            )
-            
-            update_job(
-                job_id,
-                status="completed",
-                progress=100,
-                result_path=output_path,
-                completed_at=datetime.now().isoformat()
-            )
-        except Exception as e:
-            update_job(job_id, status="failed", error=str(e))
-    
-    background_tasks.add_task(process)
     return {"job_id": job_id, "message": "Processing started"}
 
 
 @app.post("/api/master/add-packshot")
 async def add_packshot(
-    background_tasks: BackgroundTasks,
     video: UploadFile = File(...),
     packshot: UploadFile = File(...),
     position: str = Form("center"),
@@ -873,37 +1413,16 @@ async def add_packshot(
     packshot_path = save_upload(packshot, "packshot_")
     
     job_id = uuid.uuid4().hex
-    jobs[job_id] = JobStatus(
-        job_id=job_id,
-        status="pending",
-        created_at=datetime.now().isoformat()
+    create_job(job_id, status="pending")
+    enqueue_app_job(
+        "process_add_packshot_job",
+        job_id,
+        job_id,
+        str(video_path),
+        str(packshot_path),
+        position,
+        duration,
     )
-    
-    async def process():
-        try:
-            update_job(job_id, status="processing", progress=30)
-            
-            from src.mastering.element_replacer import ElementReplacer
-            replacer = ElementReplacer(str(OUTPUT_DIR))
-            
-            output_path = replacer.add_packshot(
-                str(video_path),
-                str(packshot_path),
-                position=position,
-                duration=duration
-            )
-            
-            update_job(
-                job_id,
-                status="completed",
-                progress=100,
-                result_path=output_path,
-                completed_at=datetime.now().isoformat()
-            )
-        except Exception as e:
-            update_job(job_id, status="failed", error=str(e))
-    
-    background_tasks.add_task(process)
     return {"job_id": job_id, "message": "Processing started"}
 
 
@@ -911,77 +1430,14 @@ async def add_packshot(
 
 @app.post("/api/master/analyze-scenes")
 async def analyze_scenes(
-    background_tasks: BackgroundTasks,
     video: UploadFile = File(...)
 ):
     """Phân tích scenes trong video bằng CLIP AI"""
     video_path = save_upload(video, "video_")
     
     job_id = uuid.uuid4().hex
-    jobs[job_id] = JobStatus(
-        job_id=job_id,
-        status="pending",
-        created_at=datetime.now().isoformat()
-    )
-    
-    async def process():
-        try:
-            update_job(job_id, status="processing", progress=10)
-            
-            from src.mastering.scene_detection import SceneDetector
-            detector = SceneDetector(output_dir=str(OUTPUT_DIR / "scenes" / job_id))
-            
-            # Ensure video is compatible
-            compatible_path = detector.ensure_compatible_video(str(video_path))
-            update_job(job_id, progress=20)
-            
-            # Detect scenes
-            scenes = detector.detect_scenes(compatible_path)
-            update_job(job_id, progress=50)
-            
-            # Classify scenes with CLIP
-            detector.classify_scenes(scenes, video_path=compatible_path)
-            update_job(job_id, progress=90)
-            
-            # Build result
-            scene_data = []
-            for i, s in enumerate(scenes):
-                # Convert keyframe absolute path to a URL
-                kf_url = ""
-                if s.keyframe_path and os.path.exists(s.keyframe_path):
-                    kf_url = f"/api/master/keyframe/{job_id}/{i}"
-                
-                scene_info = {
-                    "index": i,
-                    "start_time": round(s.start_time, 2),
-                    "end_time": round(s.end_time, 2),
-                    "duration": round(s.end_time - s.start_time, 2),
-                    "scene_type": s.scene_type,
-                    "keyframe_url": kf_url,
-                }
-                scene_data.append(scene_info)
-            
-            # Store scenes in job for later use (smart cut, logo removal)
-            jobs[job_id]._scenes = scenes
-            jobs[job_id]._video_path = compatible_path
-            
-            update_job(
-                job_id,
-                status="completed",
-                progress=100,
-                result_path=str(OUTPUT_DIR / "scenes" / job_id),
-                completed_at=datetime.now().isoformat()
-            )
-            # Attach scene_data to job for retrieval
-            jobs[job_id]._scene_data = scene_data
-            
-        except Exception as e:
-            logger.error(f"Scene analysis failed: {e}")
-            import traceback
-            traceback.print_exc()
-            update_job(job_id, status="failed", error=str(e))
-    
-    background_tasks.add_task(process)
+    create_job(job_id, status="pending")
+    enqueue_app_job("process_analyze_scenes_job", job_id, job_id, str(video_path))
     return {"job_id": job_id, "message": "Scene analysis started"}
 
 
@@ -995,7 +1451,7 @@ async def get_scene_results(job_id: str):
     if job.status != "completed":
         return {"status": job.status, "progress": job.progress, "error": job.error}
     
-    scene_data = getattr(job, '_scene_data', [])
+    scene_data = get_job_meta(job_id, "scene_data", [])
     return {
         "status": "completed",
         "scenes": scene_data,
@@ -1010,11 +1466,11 @@ async def get_keyframe(job_id: str, scene_index: int):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     
-    scenes = getattr(job, '_scenes', [])
+    scenes = get_job_meta(job_id, "scenes", [])
     if scene_index < 0 or scene_index >= len(scenes):
         raise HTTPException(status_code=404, detail="Scene not found")
-    
-    keyframe_path = scenes[scene_index].keyframe_path
+
+    keyframe_path = scenes[scene_index].get("keyframe_path", "")
     if not keyframe_path or not os.path.exists(keyframe_path):
         raise HTTPException(status_code=404, detail="Keyframe not found")
     
@@ -1023,7 +1479,6 @@ async def get_keyframe(job_id: str, scene_index: int):
 
 @app.post("/api/master/smart-cut")
 async def smart_cut(
-    background_tasks: BackgroundTasks,
     scene_job_id: str = Form(...),
     remove_intro: bool = Form(True),
     remove_outro: bool = Form(True),
@@ -1036,53 +1491,24 @@ async def smart_cut(
     if not scene_job or scene_job.status != "completed":
         raise HTTPException(status_code=400, detail="Scene analysis job not completed")
     
-    scenes = getattr(scene_job, '_scenes', None)
-    video_path = getattr(scene_job, '_video_path', None)
+    scenes = get_job_meta(scene_job_id, "scenes", None)
+    video_path = get_job_meta(scene_job_id, "video_path", None)
     if not scenes or not video_path:
         raise HTTPException(status_code=400, detail="Scene data not available")
     
     job_id = uuid.uuid4().hex
-    jobs[job_id] = JobStatus(
-        job_id=job_id,
-        status="pending",
-        created_at=datetime.now().isoformat()
+    create_job(job_id, status="pending")
+    enqueue_app_job(
+        "process_smart_cut_job",
+        job_id,
+        job_id,
+        scenes,
+        video_path,
+        remove_intro,
+        remove_outro,
+        remove_logo,
+        remove_product,
     )
-    
-    async def process():
-        try:
-            update_job(job_id, status="processing", progress=20)
-            
-            from src.mastering.smart_cut import SmartCutter
-            cutter = SmartCutter(output_dir=str(OUTPUT_DIR / "cuts"))
-            
-            # Generate cut list
-            keep_segments = cutter.generate_cut_list(
-                scenes,
-                remove_intro=remove_intro,
-                remove_outro=remove_outro,
-                remove_product=remove_product,
-                remove_logo=remove_logo,
-            )
-            update_job(job_id, progress=40)
-            
-            # Render video
-            output_filename = f"smartcut_{job_id}.mp4"
-            output_path = cutter.render_video(video_path, keep_segments, output_filename)
-            
-            update_job(
-                job_id,
-                status="completed",
-                progress=100,
-                result_path=output_path,
-                completed_at=datetime.now().isoformat()
-            )
-        except Exception as e:
-            logger.error(f"Smart cut failed: {e}")
-            import traceback
-            traceback.print_exc()
-            update_job(job_id, status="failed", error=str(e))
-    
-    background_tasks.add_task(process)
     return {"job_id": job_id, "message": "Smart cut started"}
 
 
@@ -1107,7 +1533,6 @@ async def logo_detect(
 
 @app.post("/api/master/logo-remove")
 async def logo_auto_remove(
-    background_tasks: BackgroundTasks,
     scene_job_id: str = Form(...),
     mask: Optional[UploadFile] = File(None),
 ):
@@ -1116,8 +1541,8 @@ async def logo_auto_remove(
     if not scene_job or scene_job.status != "completed":
         raise HTTPException(status_code=400, detail="Scene analysis job not completed")
     
-    scenes = getattr(scene_job, '_scenes', None)
-    video_path = getattr(scene_job, '_video_path', None)
+    scenes = get_job_meta(scene_job_id, "scenes", None)
+    video_path = get_job_meta(scene_job_id, "video_path", None)
     if not scenes or not video_path:
         raise HTTPException(status_code=400, detail="Scene data not available")
     
@@ -1126,55 +1551,15 @@ async def logo_auto_remove(
         mask_path = str(save_upload(mask, "mask_"))
     
     job_id = uuid.uuid4().hex
-    jobs[job_id] = JobStatus(
-        job_id=job_id,
-        status="pending",
-        created_at=datetime.now().isoformat()
+    create_job(job_id, status="pending")
+    enqueue_app_job(
+        "process_logo_auto_remove_job",
+        job_id,
+        job_id,
+        scenes,
+        video_path,
+        mask_path,
     )
-    
-    async def process():
-        try:
-            update_job(job_id, status="processing", progress=10)
-            
-            from src.mastering.logo_removal import LogoRemovalService
-            from src.mastering.inpainting import InpaintingService
-            
-            logo_service = LogoRemovalService(output_dir=str(OUTPUT_DIR / "logo_removal"))
-            inpaint_service = InpaintingService(output_dir=str(OUTPUT_DIR / "inpaint"))
-            
-            update_job(job_id, progress=20)
-            
-            result = logo_service.auto_remove_logo(
-                video_path=video_path,
-                scenes=scenes,
-                output_name=f"logo_removed_{job_id}.mp4",
-                mask_path=mask_path,
-                inpainting_service=inpaint_service,
-            )
-            
-            if result.get("status") == "success":
-                update_job(
-                    job_id,
-                    status="completed",
-                    progress=100,
-                    result_path=result["output_path"],
-                    completed_at=datetime.now().isoformat()
-                )
-            else:
-                update_job(
-                    job_id,
-                    status="completed",
-                    progress=100,
-                    result_path=video_path,
-                    completed_at=datetime.now().isoformat()
-                )
-        except Exception as e:
-            logger.error(f"Logo removal failed: {e}")
-            import traceback
-            traceback.print_exc()
-            update_job(job_id, status="failed", error=str(e))
-    
-    background_tasks.add_task(process)
     return {"job_id": job_id, "message": "Logo removal started"}
 
 
@@ -1255,7 +1640,6 @@ async def inpaint_video_preview(video: UploadFile = File(...)):
 
 @app.post("/api/master/inpaint-video")
 async def inpaint_video(
-    background_tasks: BackgroundTasks,
     video_path: str = Form(...),
     mask: UploadFile = File(...),
 ):
@@ -1264,44 +1648,56 @@ async def inpaint_video(
     job_id = uuid.uuid4().hex
     
     # Save job info
-    jobs[job_id] = {"status": "processing", "progress": 0}
-    
-    async def process():
-        try:
-            from src.mastering.inpainting import InpaintingService
-            from src.mastering.scene_detection import SceneDetector
-            
-            # Re-verify compatibility just in case
-            detector = SceneDetector()
-            compatible_path = detector.ensure_compatible_video(video_path)
-            
-            service = InpaintingService(output_dir=str(OUTPUT_DIR / "inpaint"))
-            output_name = f"inpainted_{job_id}.mp4"
-            
-            # Update progress callback
-            def update_progress(p):
-                jobs[job_id]["progress"] = int(p)
-                
-            result_path = service.inpaint_video(
-                str(compatible_path),
-                str(mask_path),
-                output_name=output_name,
-                progress_callback=update_progress
-            )
-            
-            jobs[job_id].update({
-                "status": "completed",
-                "progress": 100,
-                "result_url": f"/api/master/inpaint-result/{output_name}"
-            })
-        except Exception as e:
-            logger.error(f"Video inpainting failed: {e}")
-            import traceback
-            traceback.print_exc()
-            jobs[job_id].update({"status": "failed", "error": str(e)})
-
-    background_tasks.add_task(process)
+    create_job(
+        job_id,
+        status="processing",
+        progress=0,
+        message="Starting object removal from video...",
+    )
+    enqueue_app_job("process_inpaint_video_job", job_id, job_id, video_path, str(mask_path))
     return {"job_id": job_id}
+
+
+@app.post("/api/video-thumbnail")
+async def get_video_thumbnail(video: UploadFile = File(...)):
+    """Trích xuất thumbnail từ video (dùng cho preview MOV/không hỗ trợ)"""
+    file_path = save_upload(video, "thumb_")
+    try:
+        from src.mastering.scene_detection import SceneDetector
+        detector = SceneDetector()
+        # Đảm bảo video tương thích (ví dụ: chuyển MOV sang định dạng opencv đọc được tốt hơn nếu cần)
+        compatible_path = detector.ensure_compatible_video(str(file_path))
+        
+        import cv2
+        cap = cv2.VideoCapture(str(compatible_path))
+        ret, frame = cap.read()
+        cap.release()
+
+        if not ret:
+            raise ValueError("Could not read video frame")
+
+        # Encode frame to memory
+        _, buffer = cv2.imencode(".png", frame)
+        from fastapi.responses import Response
+        
+        # Get dimensions
+        height, width = frame.shape[:2]
+        
+        return Response(
+            content=buffer.tobytes(), 
+            media_type="image/png",
+            headers={
+                "X-Video-Width": str(width),
+                "X-Video-Height": str(height)
+            }
+        )
+    except Exception as e:
+        logger.error(f"Thumbnail extraction failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Cleanup temporary upload
+        if file_path.exists():
+            os.remove(file_path)
 
 
 @app.get("/api/master/inpaint-result/{filename}")
@@ -1318,10 +1714,9 @@ async def get_inpaint_result(filename: str):
 
 @app.post("/api/subtitle-batch")
 async def add_subtitle_batch(
-    background_tasks: BackgroundTasks,
     video: UploadFile = File(...),
     subtitle_text: str = Form(...),
-    source_language: str = Form("en"),
+    source_lang: str = Form("en"),
     target_languages: str = Form("vi"),  # Comma-separated: "vi,ja,ko"
     video_format: str = Form("16x9")
 ):
@@ -1330,7 +1725,7 @@ async def add_subtitle_batch(
     
     - **video**: File video gốc
     - **subtitle_text**: Phụ đề gốc (text hoặc từng dòng)
-    - **source_language**: Ngôn ngữ gốc của phụ đề (en, vi...)
+    - **source_lang**: Ngôn ngữ gốc của phụ đề (en, vi...)
     - **target_languages**: Các ngôn ngữ cần dịch, phân cách bằng dấu phẩy (vi,ja,ko)
     - **video_format**: Định dạng video (16x9, 9x16, 1x1, 4x5)
     
@@ -1354,111 +1749,17 @@ async def add_subtitle_batch(
     
     # Create job
     job_id = uuid.uuid4().hex
-    jobs[job_id] = JobStatus(
-        job_id=job_id,
-        status="pending",
-        created_at=datetime.now().isoformat()
+    create_job(job_id, status="pending")
+    enqueue_app_job(
+        "process_subtitle_batch_job",
+        job_id,
+        job_id,
+        str(video_path),
+        lines,
+        source_lang,
+        targets,
+        video_format,
     )
-    
-    # Background task
-    async def process_batch():
-        try:
-            update_job(job_id, status="processing", progress=5)
-            
-            from src.subtitle.translator import SubtitleTranslator
-            from src.subtitle.timing_sync import TimingSync, extract_audio
-            from src.subtitle.renderer import SubtitleRenderer
-            import zipfile
-            
-            sync = TimingSync()
-            translator = SubtitleTranslator()
-            renderer = SubtitleRenderer(str(OUTPUT_DIR))
-            
-            # Step 1: Segment text if needed
-            if len(lines) == 1 and len(lines[0]) > 100:
-                update_job(job_id, progress=10)
-                subtitle_lines = sync.segment_long_text(lines[0], source_language, 80, True)
-            else:
-                subtitle_lines = lines
-            
-            # Step 2: Get timing from video
-            update_job(job_id, progress=20)
-            try:
-                audio_path = extract_audio(str(video_path))
-                update_job(job_id, progress=30)
-                transcript = sync.transcribe(audio_path, source_language)
-                aligned = sync.align_subtitles(subtitle_lines, transcript)
-            except Exception as e:
-                logger.warning(f"Timing failed: {e}, using fallback")
-                aligned = [(i * 3, (i + 1) * 3, t) for i, t in enumerate(subtitle_lines)]
-            
-            update_job(job_id, progress=40)
-            
-            # Step 3: Translate to each target language
-            output_files = []
-            total_langs = len(targets)
-            
-            for idx, target_lang in enumerate(targets):
-                lang_progress = 40 + int(50 * (idx / total_langs))
-                update_job(job_id, progress=lang_progress)
-                
-                # Translate
-                if target_lang != source_language:
-                    translated_aligned = translator.translate_with_timing(
-                        aligned, source_language, target_lang
-                    )
-                else:
-                    translated_aligned = aligned
-                
-                # Apply line breaks
-                translated_aligned = [
-                    (start, end, sync.smart_line_break(text))
-                    for start, end, text in translated_aligned
-                ]
-                
-                # Render video
-                output_path = renderer.render(
-                    str(video_path),
-                    translated_aligned,
-                    language=target_lang,
-                    video_format=video_format
-                )
-                
-                # Rename with language suffix
-                new_path = output_path.replace("_subtitled.mp4", f"_{target_lang}.mp4")
-                if output_path != new_path:
-                    import shutil
-                    shutil.move(output_path, new_path)
-                    output_path = new_path
-                
-                output_files.append((target_lang, output_path))
-                logger.info(f"Generated {target_lang} version: {output_path}")
-            
-            update_job(job_id, progress=90)
-            
-            # Step 4: Create ZIP if multiple files
-            if len(output_files) > 1:
-                zip_path = str(OUTPUT_DIR / f"batch_{job_id}.zip")
-                with zipfile.ZipFile(zip_path, 'w') as zf:
-                    for lang, path in output_files:
-                        zf.write(path, Path(path).name)
-                result_path = zip_path
-            else:
-                result_path = output_files[0][1]
-            
-            update_job(
-                job_id,
-                status="completed",
-                progress=100,
-                result_path=result_path,
-                completed_at=datetime.now().isoformat()
-            )
-            
-        except Exception as e:
-            logger.error(f"Batch job {job_id} failed: {e}")
-            update_job(job_id, status="failed", error=str(e))
-    
-    background_tasks.add_task(process_batch)
     
     return {
         "job_id": job_id, 
@@ -1468,7 +1769,6 @@ async def add_subtitle_batch(
 
 @app.post("/api/subtitle-export")
 async def export_subtitle_files(
-    background_tasks: BackgroundTasks,
     video: UploadFile = File(...),
     subtitle_text: str = Form(...),
     language: str = Form("vi"),
@@ -1498,113 +1798,18 @@ async def export_subtitle_files(
     
     # Create job
     job_id = uuid.uuid4().hex
-    jobs[job_id] = JobStatus(
-        job_id=job_id,
-        status="pending",
-        created_at=datetime.now().isoformat()
-    )
-    
-    # Parse translate languages
+    create_job(job_id, status="pending")
     translate_langs = [l.strip() for l in translate_to.split(",") if l.strip()]
-    
-    async def process_export():
-        try:
-            update_job(job_id, status="processing", progress=5)
-            
-            from src.subtitle.timing_sync import TimingSync, extract_audio
-            from src.subtitle.exporter import SubtitleExporter
-            from src.subtitle.translator import SubtitleTranslator
-            import zipfile
-            
-            sync = TimingSync()
-            exporter = SubtitleExporter(str(OUTPUT_DIR))
-            
-            # Step 1: Segment if needed
-            if len(lines) == 1 and len(lines[0]) > 100:
-                subtitle_lines = sync.segment_long_text(lines[0], language, 80, True)
-            else:
-                subtitle_lines = lines
-            
-            update_job(job_id, progress=20)
-            
-            # Step 2: Get timing
-            try:
-                audio_path = extract_audio(str(video_path))
-                update_job(job_id, progress=40)
-                transcript = sync.transcribe(audio_path, language)
-                aligned = sync.align_subtitles(subtitle_lines, transcript)
-            except Exception as e:
-                logger.warning(f"Timing failed: {e}, using fallback")
-                aligned = [(i * 3, (i + 1) * 3, t) for i, t in enumerate(subtitle_lines)]
-            
-            # Apply line breaks
-            aligned = [
-                (start, end, sync.smart_line_break(text))
-                for start, end, text in aligned
-            ]
-            
-            update_job(job_id, progress=60)
-            
-            # Step 3: Export files
-            output_files = []
-            base_name = Path(video_path).stem
-            
-            # Original language
-            if export_format in ["srt", "both"]:
-                srt_path = exporter.export_srt(aligned, f"{base_name}_{language}")
-                output_files.append(srt_path)
-            
-            if export_format in ["ass", "both"]:
-                ass_path = exporter.export_ass(aligned, f"{base_name}_{language}")
-                output_files.append(ass_path)
-            
-            # Translations
-            if translate_langs:
-                translator = SubtitleTranslator()
-                
-                for target_lang in translate_langs:
-                    if target_lang != language:
-                        translated_aligned = translator.translate_with_timing(
-                            aligned, language, target_lang
-                        )
-                        
-                        if export_format in ["srt", "both"]:
-                            srt_path = exporter.export_srt(
-                                translated_aligned, f"{base_name}_{target_lang}"
-                            )
-                            output_files.append(srt_path)
-                        
-                        if export_format in ["ass", "both"]:
-                            ass_path = exporter.export_ass(
-                                translated_aligned, f"{base_name}_{target_lang}"
-                            )
-                            output_files.append(ass_path)
-            
-            update_job(job_id, progress=90)
-            
-            # Create ZIP if multiple files
-            if len(output_files) > 1:
-                zip_path = str(OUTPUT_DIR / f"subtitles_{job_id}.zip")
-                with zipfile.ZipFile(zip_path, 'w') as zf:
-                    for path in output_files:
-                        zf.write(path, Path(path).name)
-                result_path = zip_path
-            else:
-                result_path = output_files[0]
-            
-            update_job(
-                job_id,
-                status="completed",
-                progress=100,
-                result_path=result_path,
-                completed_at=datetime.now().isoformat()
-            )
-            
-        except Exception as e:
-            logger.error(f"Export job {job_id} failed: {e}")
-            update_job(job_id, status="failed", error=str(e))
-    
-    background_tasks.add_task(process_export)
+    enqueue_app_job(
+        "process_subtitle_export_job",
+        job_id,
+        job_id,
+        str(video_path),
+        lines,
+        language,
+        export_format,
+        translate_langs,
+    )
     
     return {
         "job_id": job_id,
@@ -1619,6 +1824,78 @@ async def get_job_status(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+
+@app.api_route("/api/video/{video_path:path}", methods=["GET", "HEAD"])
+async def stream_video(video_path: str, request: Request):
+    """
+    Custom video streaming route that supports Range requests (Seeking/Tua).
+    This is the most robust way to ensure seeking works in all browsers.
+    """
+    full_path = OUTPUT_DIR / video_path
+    if not full_path.exists():
+        raise HTTPException(status_code=404, detail="Video not found")
+        
+    file_size = full_path.stat().st_size
+    range_header = request.headers.get("range")
+    
+    ext = full_path.suffix.lower()
+    media_types = {
+        ".mp4": "video/mp4",
+        ".mov": "video/quicktime",
+        ".qt": "video/quicktime",
+        ".webm": "video/webm",
+        ".mkv": "video/x-matroska"
+    }
+    content_type = media_types.get(ext, "video/mp4")
+    
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Type": content_type,
+        "Cache-Control": "no-cache",
+    }
+    
+    if range_header:
+        # Range format: "bytes=start-end"
+        try:
+            start, end = range_header.replace("bytes=", "").split("-")
+            start = int(start)
+            end = int(end) if end else file_size - 1
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid range format")
+            
+        if start >= file_size:
+            raise HTTPException(status_code=416, detail="Requested range not satisfiable")
+            
+        chunk_size = (end - start) + 1
+        
+        def iter_file():
+            with open(full_path, "rb") as f:
+                f.seek(start)
+                remaining = chunk_size
+                while remaining > 0:
+                    chunk = f.read(min(1024 * 1024, remaining))  # 1MB chunks
+                    if not chunk:
+                        break
+                    yield chunk
+                    remaining -= len(chunk)
+                    
+        headers.update({
+            "Content-Range": f"bytes {start}-{end}/{file_size}",
+            "Content-Length": str(chunk_size),
+        })
+        
+        return StreamingResponse(iter_file(), status_code=206, headers=headers)
+        
+    # Normal full-file response
+    headers["Content-Length"] = str(file_size)
+    
+    def iter_full_file():
+        with open(full_path, "rb") as f:
+            while chunk := f.read(1024 * 1024):
+                yield chunk
+                
+    return StreamingResponse(iter_full_file(), headers=headers)
 
 
 @app.get("/api/download/{job_id}")
@@ -1651,7 +1928,13 @@ async def download_result(job_id: str):
         )
     
     ext = result_path.suffix.lower()
-    media_types = {".mp4": "video/mp4", ".srt": "text/plain", ".zip": "application/zip"}
+    media_types = {
+        ".mp4": "video/mp4", 
+        ".mov": "video/quicktime", 
+        ".qt": "video/quicktime", 
+        ".srt": "text/plain", 
+        ".zip": "application/zip"
+    }
     
     return FileResponse(
         str(result_path),

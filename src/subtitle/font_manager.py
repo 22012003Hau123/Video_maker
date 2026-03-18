@@ -24,155 +24,93 @@ class FontConfig:
     font_color: str = "white"
     outline_color: str = "black"
     outline_width: int = 2
+    shadow_color: str = "&H80000000"  # ASS format (50% opacity black)
+    shadow_width: float = 2.0
+    shadow_blur: float = 6.0
     bold: bool = False
     italic: bool = False
+    scale: float = 1.0
 
 
 class FontManager:
     """Quản lý font theo ngôn ngữ"""
     
-    # Mapping font mặc định theo ngôn ngữ
+    # Mapping font mặc định theo ngôn ngữ 
+    # Helvetica thường không có trên Linux, dùng DejaVu Sans làm fallback tương đương
     DEFAULT_FONTS: Dict[str, FontConfig] = {
-        # Tiếng Việt
-        'vi': FontConfig(
-            language='vi',
-            font_family='Arial',
-            font_size=48,
-            font_color='white',
-            outline_color='black'
-        ),
-        # English
-        'en': FontConfig(
-            language='en',
-            font_family='Arial',
-            font_size=48,
-            font_color='white',
-            outline_color='black'
-        ),
-        # 日本語 (Japanese)
-        'ja': FontConfig(
-            language='ja',
-            font_family='Noto Sans JP',
-            font_size=44,
-            font_color='white',
-            outline_color='black'
-        ),
-        # 한국어 (Korean)
-        'ko': FontConfig(
-            language='ko',
-            font_family='Noto Sans KR',
-            font_size=44,
-            font_color='white',
-            outline_color='black'
-        ),
-        # 中文 (Chinese)
-        'zh': FontConfig(
-            language='zh',
-            font_family='Noto Sans SC',
-            font_size=44,
-            font_color='white',
-            outline_color='black'
-        ),
-        # Français (French)
-        'fr': FontConfig(
-            language='fr',
-            font_family='Arial',
-            font_size=48,
-            font_color='white',
-            outline_color='black'
-        ),
-        # Español (Spanish)
-        'es': FontConfig(
-            language='es',
-            font_family='Arial',
-            font_size=48,
-            font_color='white',
-            outline_color='black'
-        ),
-        # Deutsch (German)
-        'de': FontConfig(
-            language='de',
-            font_family='Arial',
-            font_size=48,
-            font_color='white',
-            outline_color='black'
-        ),
-        # العربية (Arabic)
-        'ar': FontConfig(
-            language='ar',
-            font_family='Noto Sans Arabic',
-            font_size=44,
-            font_color='white',
-            outline_color='black'
-        ),
-        # ภาษาไทย (Thai)
-        'th': FontConfig(
-            language='th',
-            font_family='Noto Sans Thai',
-            font_size=44,
-            font_color='white',
-            outline_color='black'
-        ),
+        'en': FontConfig(language='en', font_family='DejaVu Sans', font_size=48),
+        'uk': FontConfig(language='uk', font_family='DejaVu Sans', font_size=48),
+        'de': FontConfig(language='de', font_family='DejaVu Sans', font_size=48),
+        'it': FontConfig(language='it', font_family='DejaVu Sans', font_size=48),
+        'fr': FontConfig(language='fr', font_family='DejaVu Sans', font_size=48),
+        'es': FontConfig(language='es', font_family='DejaVu Sans', font_size=48),
+        'nl': FontConfig(language='nl', font_family='DejaVu Sans', font_size=48),
+        'ja': FontConfig(language='ja', font_family='Noto Sans CJK JP', font_size=48), 
+        'vi': FontConfig(language='vi', font_family='DejaVu Sans', font_size=48),
     }
     
     def __init__(self, fonts_dir: Optional[str] = None):
         self.fonts_dir = Path(fonts_dir) if fonts_dir else FONTS_DIR
         self.custom_fonts: Dict[str, FontConfig] = {}
-        self._scan_fonts()
-    
-    def _scan_fonts(self):
-        """Scan thư mục fonts để tìm font files"""
-        if not self.fonts_dir.exists():
-            logger.warning(f"Fonts directory not found: {self.fonts_dir}")
-            return
-            
-        for font_file in self.fonts_dir.glob("**/*.ttf"):
-            logger.debug(f"Found font: {font_file}")
-        for font_file in self.fonts_dir.glob("**/*.otf"):
-            logger.debug(f"Found font: {font_file}")
     
     def get_font_config(self, language: str) -> FontConfig:
         """Lấy cấu hình font cho ngôn ngữ"""
-        lang = language.lower()[:2]  # Normalize: vi-VN -> vi
+        lang = language.lower()
+        if lang in ["en", "us", "uk"]: 
+            # Handle regional variants
+            if "uk" in lang: config = self.DEFAULT_FONTS['uk']
+            else: config = self.DEFAULT_FONTS['en']
+        else:
+            lang_short = lang[:2]
+            if lang_short in self.DEFAULT_FONTS:
+                config = self.DEFAULT_FONTS[lang_short]
+            else:
+                config = self.DEFAULT_FONTS['en']
         
-        # Ưu tiên custom fonts
-        if lang in self.custom_fonts:
-            return self.custom_fonts[lang]
-        
-        # Fallback to defaults
-        if lang in self.DEFAULT_FONTS:
-            return self.DEFAULT_FONTS[lang]
-        
-        # Default fallback
-        logger.warning(f"No font config for language '{language}', using English default")
-        return self.DEFAULT_FONTS['en']
-    
-    def set_custom_font(self, language: str, config: FontConfig):
-        """Đặt font custom cho ngôn ngữ"""
-        self.custom_fonts[language.lower()[:2]] = config
-        logger.info(f"Set custom font for {language}: {config.font_family}")
+        # Check if custom font exists in data/fonts
+        if self.fonts_dir.exists():
+            # Priority 1: language-specific font (e.g. ja.ttf)
+            lang_font = self.fonts_dir / f"{lang}.ttf"
+            if lang_font.exists():
+                config.font_path = str(lang_font)
+                config.font_family = lang_font.stem
+            
+            # Priority 2: global custom font (e.g. custom.ttf)
+            elif (self.fonts_dir / "custom.ttf").exists():
+                config.font_path = str(self.fonts_dir / "custom.ttf")
+                config.font_family = "custom"
+                
+        return config
     
     def get_ffmpeg_font_options(self, language: str, video_format: str = "16x9") -> Dict:
         """Lấy options cho FFmpeg subtitle filter"""
         config = self.get_font_config(language)
         
-        # Điều chỉnh font size theo format video
-        size_multipliers = {
-            "1x1": 0.8,
-            "4x5": 0.85,
-            "9x16": 0.9,
-            "16x9": 1.0,
-        }
-        multiplier = size_multipliers.get(video_format, 1.0)
-        adjusted_size = int(config.font_size * multiplier)
+        # Override parameters based on user spec for each format
+        # Default behavior for non-specified formats
+        adjusted_size = config.font_size
+        scale = 1.0
         
+        if video_format == "16x9":
+            adjusted_size = 48
+        elif video_format == "9x16":
+            adjusted_size = 55
+        elif video_format == "1x1":
+            adjusted_size = 48
+            scale = 1.62  # Derived from user screenshot
+        elif video_format == "4x5":
+            adjusted_size = 48
+            
         return {
-            "fontfile": config.font_path or "",
             "fontname": config.font_family,
             "fontsize": adjusted_size,
             "fontcolor": config.font_color,
-            "bordercolor": config.outline_color,
-            "borderw": config.outline_width,
+            "outline": 0,  # Disabled per spec
+            "shadow": config.shadow_width,
+            "blur": config.shadow_blur,
+            "backcolor": config.shadow_color,
+            "scalex": int(100 * scale),
+            "scaley": int(100 * scale),
             "bold": 1 if config.bold else 0,
             "italic": 1 if config.italic else 0,
         }

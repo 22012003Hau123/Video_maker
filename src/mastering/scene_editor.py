@@ -5,9 +5,7 @@ Xóa/thêm cảnh và điều chỉnh nhạc
 import subprocess
 import os
 import logging
-from pathlib import Path
-from typing import Optional, List, Tuple
-import tempfile
+from src.utils.video import get_video_info
 
 logger = logging.getLogger(__name__)
 
@@ -19,19 +17,9 @@ class SceneEditor:
         self.output_dir = Path(output_dir) if output_dir else Path("./outputs")
         self.output_dir.mkdir(parents=True, exist_ok=True)
     
-    def _get_video_duration(self, video_path: str) -> float:
-        """Lấy thời lượng video"""
-        cmd = [
-            "ffprobe", "-v", "quiet",
-            "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1",
-            video_path
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        try:
-            return float(result.stdout.strip())
-        except:
-            return 60.0
+    def _get_video_duration_legacy(self, video_path: str) -> float:
+        """Lấy thời lượng video (Dùng cho backward compatibility)"""
+        return get_video_info(video_path)['duration']
     
     def trim_video(
         self,
@@ -63,7 +51,7 @@ class SceneEditor:
             duration = end_time - start_time
             cmd.extend(["-t", str(duration)])
         
-        cmd.extend(["-c", "copy", str(output_path)])
+        cmd.extend(["-c:v", "copy", "-c:a", "aac", str(output_path)])
         
         result = subprocess.run(cmd, capture_output=True, text=True)
         
@@ -94,7 +82,7 @@ class SceneEditor:
             Đường dẫn video output
         """
         video_path = Path(video_path)
-        video_duration = self._get_video_duration(str(video_path))
+        video_duration = get_video_info(str(video_path))['duration']
         
         if output_path is None:
             output_path = self.output_dir / f"{video_path.stem}_edited{video_path.suffix}"
@@ -109,7 +97,7 @@ class SceneEditor:
                 subprocess.run([
                     "ffmpeg", "-y", "-i", str(video_path),
                     "-t", str(start_time),
-                    "-c", "copy", part1
+                    "-c:v", "copy", "-c:a", "aac", part1
                 ], capture_output=True)
             
             # Cắt phần 2 (từ end_time đến cuối)
@@ -117,7 +105,7 @@ class SceneEditor:
                 subprocess.run([
                     "ffmpeg", "-y", "-i", str(video_path),
                     "-ss", str(end_time),
-                    "-c", "copy", part2
+                    "-c:v", "copy", "-c:a", "aac", part2
                 ], capture_output=True)
             
             # Nối các phần
@@ -134,7 +122,7 @@ class SceneEditor:
                 # Chỉ có 1 phần, copy trực tiếp
                 subprocess.run([
                     "ffmpeg", "-y", "-i", parts[0],
-                    "-c", "copy", str(output_path)
+                    "-c:v", "copy", "-c:a", "aac", str(output_path)
                 ], capture_output=True)
             else:
                 # Nối 2 phần với crossfade
@@ -150,7 +138,7 @@ class SceneEditor:
         crossfade_duration: float
     ):
         """Nối 2 video với crossfade"""
-        duration1 = self._get_video_duration(video1)
+        duration1 = get_video_info(video1)['duration']
         
         filter_complex = (
             f"[0:v][1:v]xfade=transition=fade:duration={crossfade_duration}:"
@@ -187,7 +175,7 @@ class SceneEditor:
                 "-f", "concat",
                 "-safe", "0",
                 "-i", listfile,
-                "-c", "copy",
+                "-c:v", "copy", "-c:a", "aac",
                 output_path
             ], capture_output=True)
         finally:
@@ -232,7 +220,7 @@ class SceneEditor:
             subprocess.run([
                 "ffmpeg", "-y",
                 "-i", current,
-                "-c", "copy",
+                "-c:v", "copy", "-c:a", "aac",
                 str(output_path)
             ], capture_output=True)
         
@@ -324,7 +312,7 @@ class SceneEditor:
                 "-filter_complex", filter_complex,
                 "-map", "0:v",
                 "-map", "[aout]",
-                "-c:v", "copy",
+                "-c:v", "copy", "-c:a", "aac",
                 str(output_path)
             ]
         else:
@@ -335,7 +323,7 @@ class SceneEditor:
                 "-i", audio_path,
                 "-map", "0:v",
                 "-map", "1:a",
-                "-c:v", "copy",
+                "-c:v", "copy", "-c:a", "aac",
                 "-shortest",
                 str(output_path)
             ]

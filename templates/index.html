@@ -124,7 +124,7 @@
         }
         
         .form-group {
-            margin-bottom: 1.5rem;
+            margin-bottom: 1rem;
         }
         
         .form-group label {
@@ -267,11 +267,12 @@
         }
         
         .progress-bar {
-            height: 8px;
-            background: var(--background);
-            border-radius: 4px;
+            height: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
             overflow: hidden;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.75rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
         }
         
         .progress-bar .fill {
@@ -284,8 +285,15 @@
         .status-text {
             display: flex;
             justify-content: space-between;
-            color: var(--text-muted);
-            font-size: 0.9rem;
+            align-items: center;
+            color: var(--text);
+            font-size: 0.95rem;
+            font-weight: 500;
+        }
+        
+        .status-percent {
+            color: var(--primary);
+            font-weight: 700;
         }
         
         .status-completed {
@@ -298,6 +306,57 @@
         
         .download-btn {
             margin-top: 1rem;
+        }
+
+        /* Collapsible Settings */
+        .settings-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--surface-light);
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 1rem;
+            border: 1px solid var(--border-color);
+            transition: all 0.2s ease;
+        }
+
+        .settings-header:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--primary);
+        }
+
+        .settings-header h3 {
+            margin: 0;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            color: var(--text);
+        }
+
+        .settings-content {
+            overflow: hidden;
+            transition: max-height 0.3s ease-out, opacity 0.3s ease;
+            max-height: 1000px;
+            opacity: 1;
+        }
+
+        .settings-content.collapsed {
+            max-height: 0;
+            opacity: 0;
+            margin-bottom: 0;
+        }
+
+        .toggle-icon {
+            transition: transform 0.3s ease;
+        }
+
+        .collapsed .toggle-icon {
+            transform: rotate(-90deg);
+        }
+        .download-btn {
             background: var(--success);
             color: white;
         }
@@ -361,8 +420,8 @@
         
         textarea {
             width: 100%;
-            min-height: 200px;
-            padding: 1rem;
+            min-height: 120px;
+            padding: 0.75rem;
             background: var(--surface-light);
             border: 2px solid transparent;
             border-radius: 12px;
@@ -378,9 +437,16 @@
             border-color: var(--primary);
         }
         
-        textarea::placeholder {
+        [contenteditable="true"]:focus {
+            background: rgba(59, 130, 246, 0.05);
+            border-color: var(--primary) !important;
+            box-shadow: inset 0 0 0 1px var(--primary);
+        }
+        #translation-table th {
+            font-weight: 600;
             color: var(--text-muted);
-            opacity: 0.7;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
         /* Modal styles from Mastering_video */
         .modal-overlay {
@@ -460,6 +526,94 @@
         .card-status.active { display: flex; }
         .card-status.done { background: rgba(67, 233, 123, 0.1); color: #43e97b; }
         .card-status.error { background: rgba(245, 87, 108, 0.1); color: #f5576c; }
+        /* Export Options Redesign */
+        .export-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-top: 0.5rem;
+        }
+        
+        @media (max-width: 768px) {
+            .export-grid { grid-template-columns: 1fr; }
+        }
+        
+        .export-card {
+            background: var(--surface-light);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 1.25rem;
+            transition: all 0.3s ease;
+            position: relative;
+            cursor: pointer;
+        }
+        
+        .export-card:hover {
+            border-color: var(--primary);
+            background: rgba(59, 130, 246, 0.05);
+            transform: translateY(-2px);
+        }
+        
+        .export-card.active {
+            border-color: var(--primary);
+            background: rgba(59, 130, 246, 0.1);
+            box-shadow: 0 4px 20px rgba(59, 130, 246, 0.15);
+        }
+        
+        .export-card input[type="checkbox"] {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            width: 18px;
+            height: 18px;
+        }
+        
+        .export-card-content {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .export-card-icon {
+            font-size: 2rem;
+            color: var(--primary);
+            background: rgba(59, 130, 246, 0.1);
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+        }
+        
+        .export-card-text b {
+            display: block;
+            margin-bottom: 0.2rem;
+        }
+        
+        .export-card-text span {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+        
+        .format-select-container {
+            background: var(--surface-light);
+            border-radius: 12px;
+            padding: 1.25rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .format-info {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            padding: 0.5rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 6px;
+        }
     </style>
 </head>
 <body>
@@ -503,6 +657,7 @@
                         <label>Preview</label>
                         <div id="video-preview" style="background: var(--surface-light); border-radius: 12px; min-height: 180px; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;">
                             <video id="preview-player" style="width: 100%; height: 180px; object-fit: contain; display: none;"></video>
+                            <img id="preview-img" style="width: 100%; height: 180px; object-fit: contain; display: none;">
                             <span id="preview-placeholder" style="color: var(--text-muted);"><i class="ph ph-film-strip"></i> Preview will appear here</span>
                         </div>
                     </div>
@@ -513,7 +668,7 @@
                     <label>Subtitle Mode:</label>
                     <div class="input-tabs">
                         <button type="button" class="input-tab active" onclick="switchInputMode('auto')"><i class="ph ph-robot"></i> Auto (AI)</button>
-                        <button type="button" class="input-tab" onclick="switchInputMode('text')"><i class="ph ph-pencil-simple"></i> Manual Text</button>
+                        <button type="button" class="input-tab" onclick="switchInputMode('text')"><i class="ph ph-table"></i> Manual Excel (Table)</button>
                     </div>
                     
                     <div id="auto-input" class="input-content active">
@@ -523,64 +678,141 @@
                     </div>
                     
                     <div id="text-input" class="input-content">
-                        <textarea name="subtitle_text" id="subtitle-textarea" placeholder="Enter subtitles, one sentence per line:
+                        <div id="excel-upload-container" style="padding: 1.5rem; border: 2px dashed var(--border-color); border-radius: 12px; text-align: center; background: var(--surface-light); margin-bottom: 1rem; cursor: pointer;" onclick="document.getElementById('excel-translation-input').click()">
+                            <input type="file" id="excel-translation-input" accept=".xlsx, .xls, .csv" style="display: none;" onchange="handleTranslationExcel(this)">
+                            <div style="font-size: 2rem; color: var(--primary); margin-bottom: 0.5rem;"><i class="ph ph-file-xls"></i></div>
+                            <div style="font-weight: 600;">Upload Translation Excel / CSV</div>
+                            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.4rem;">Supports: .xlsx, .xls, .csv (Headers: EN, FR, ES, NL, JP)</div>
+                        </div>
 
-What makes a moment unforgettable?
-Craft. Time. And a story worth savoring."></textarea>
+                        <div id="translation-table-container" style="display: none; max-height: 400px; overflow: auto; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface);">
+                            <table id="translation-table" style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+                                <thead style="position: sticky; top: 0; background: var(--surface-light); border-bottom: 2px solid var(--border-color); z-index: 10;">
+                                    <tr>
+                                        <th style="padding: 0.8rem; text-align: left; width: 40px;">#</th>
+                                        <th style="padding: 0.8rem; text-align: left;">EN (Source)</th>
+                                        <th style="padding: 0.8rem; text-align: left;">FR</th>
+                                        <th style="padding: 0.8rem; text-align: left;">ES</th>
+                                        <th style="padding: 0.8rem; text-align: left;">NL</th>
+                                        <th style="padding: 0.8rem; text-align: left;">JP</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                            <div style="padding: 0.8rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--surface-light);">
+                                <button type="button" class="btn btn-sm" onclick="addTranslationRow()"><i class="ph ph-plus"></i> Add Row</button>
+                                <span style="font-size: 0.75rem; color: var(--text-muted);">* Cells are editable. Click to change text.</span>
+                            </div>
+                        </div>
+                        
+                        <input type="hidden" name="subtitle_text" id="subtitle-textarea">
+                        <div style="margin-top: 0.8rem;">
+                            <label class="checkbox-label" style="font-size: 0.85rem; color: var(--text-muted);">
+                                <input type="checkbox" id="auto-segment-rhythm" checked> <i class="ph ph-waveform"></i> Auto-segment by rhythm (matches audio pacing)
+                            </label>
+                        </div>
                     </div>
                 </div>
                 
-                <!-- Language Settings -->
-                <div class="grid-2">
+                <!-- Collapsible Settings Header -->
+                <div class="settings-header collapsed" onclick="toggleSubtitleSettings()">
+                    <h3><i class="ph ph-gear-six"></i> Advanced Settings</h3>
+                    <i class="ph ph-caret-down toggle-icon" id="settings-caret"></i>
+                </div>
+
+                <!-- Collapsible Content -->
+                <div id="subtitle-settings" class="settings-content collapsed">
+                    <!-- Language Settings -->
+                    <div class="grid-2">
+                        <div class="form-group" style="display: none;">
+                            <label>Source Language</label>
+                            <select name="source_lang">
+                                <option value="auto" selected>Auto Detect</option>
+                                <option value="en">🇺🇸 US English</option>
+                                <option value="uk">🇬🇧 UK English</option>
+                                <option value="de">🇩🇪 German</option>
+                                <option value="it">🇮🇹 Italian</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="display: none;">
+                            <input type="hidden" name="video_format" value="16x9">
+                        </div>
+                    </div>
+                    
+                    <!-- Target Languages -->
                     <div class="form-group">
-                        <label>Source Language</label>
-                        <select name="source_language">
-                            <option value="en">🇺🇸 English</option>
-                            <option value="vi">🇻🇳 Vietnamese</option>
-                            <option value="fr">🇫🇷 French</option>
-                            <option value="zh">🇨🇳 Chinese</option>
-                        </select>
+                        <label>Translate to (Multi-select)</label>
+                        <div style="display: flex; flex-wrap: wrap; gap: 0.8rem; padding: 0.5rem; background: var(--surface-light); border-radius: 8px;">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="lang_fr" value="fr" checked> 🇫🇷 French
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="lang_es" value="es" checked> 🇪🇸 Spanish
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="lang_nl" value="nl" checked> 🇳🇱 Dutch
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="lang_ja" value="ja" checked> 🇯🇵 Japanese
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="lang_en" value="en"> 🇺🇸 US English
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="lang_uk" value="uk"> 🇬🇧 UK English
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="lang_de" value="de"> 🇩🇪 German
+                            </label>
+                             <label class="checkbox-label">
+                                <input type="checkbox" name="lang_it" value="it"> 🇮🇹 Italian
+                            </label>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>Video Format</label>
-                        <select name="video_format">
-                            <option value="16x9">16:9 (YouTube, TV)</option>
-                            <option value="9x16">9:16 (TikTok, Reels)</option>
-                            <option value="1x1">1:1 (Instagram Feed)</option>
-                            <option value="4x5">4:5 (Instagram Portrait)</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <!-- Target Languages -->
-                <div class="form-group">
-                    <label>Translate to (Multi-select)</label>
-                    <div style="display: flex; flex-wrap: wrap; gap: 0.8rem; padding: 0.8rem; background: var(--surface-light); border-radius: 8px;">
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="lang_en" value="en" checked> 🇺🇸 English
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="lang_vi" value="vi" checked> 🇻🇳 Vietnamese
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="lang_fr" value="fr" checked> 🇫🇷 French
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="lang_zh" value="zh" checked> 🇨🇳 Chinese
-                        </label>
-                    </div>
-                </div>
-                
-                <!-- Export Options -->
-                <div class="form-group">
-                    <label>Export Output</label>
-                    <div style="display: flex; gap: 1.5rem; padding: 0.8rem; background: var(--surface-light); border-radius: 8px;">
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="export_video" value="1" checked> <i class="ph ph-film-strip"></i> Video with Subtitles
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="export_srt" value="1"> <i class="ph ph-file-text"></i> SRT File
-                        </label>
+                    
+                    <!-- Export Options Redesign -->
+                    <div class="form-group" style="margin-top: 1.5rem;">
+                        <label><i class="ph ph-hard-drives"></i> Output & Format</label>
+                        <div class="export-grid">
+                            <!-- File Types -->
+                            <div style="display: flex; gap: 1rem;">
+                                <div class="export-card active" onclick="const cb = this.querySelector('input'); cb.checked = !cb.checked; this.classList.toggle('active', cb.checked);">
+                                    <input type="checkbox" name="export_video" value="1" checked onclick="event.stopPropagation(); this.parentElement.classList.toggle('active', this.checked);">
+                                    <div class="export-card-content">
+                                        <div class="export-card-icon"><i class="ph ph-film-strip"></i></div>
+                                        <div class="export-card-text">
+                                            <b>Video</b>
+                                            <span>Burned-in subs</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="export-card" onclick="const cb = this.querySelector('input'); cb.checked = !cb.checked; this.classList.toggle('active', cb.checked);">
+                                    <input type="checkbox" name="export_srt" value="1" onclick="event.stopPropagation(); this.parentElement.classList.toggle('active', this.checked);">
+                                    <div class="export-card-content">
+                                        <div class="export-card-icon"><i class="ph ph-file-text"></i></div>
+                                        <div class="export-card-text">
+                                            <b>SRT</b>
+                                            <span>Sidecar file</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Format Selector -->
+                            <div class="format-select-container">
+                                <label style="font-size: 0.8rem; margin-bottom: 0.5rem; display: block; color: var(--text-muted);">Encoding Preset:</label>
+                                <select name="export_format" onchange="updateFormatInfo(this.value)">
+                                    <option value="mp4_standard">🌐 Standard (MP4 - H.264)</option>
+                                    <option value="prores">🎬 ProRes 422 (.MOV - Production)</option>
+                                    <option value="mp4_20mbps">🚀 High Bitrate (20Mbps - MP4)</option>
+                                </select>
+                                <div id="format-info-box" class="format-info">
+                                    <i class="ph ph-info"></i>
+                                    <span id="format-info-text">Ideal for web sharing and general review.</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
@@ -606,116 +838,72 @@ Craft. Time. And a story worth savoring."></textarea>
         <div id="panel-legal" class="panel">
             <h2><i class="ph ph-gavel"></i> Add Legal Content</h2>
             
-            <!-- Toggle Video/Image -->
-            <div class="form-group">
-                <label>File Type</label>
-                <div class="toggle-group" style="display: flex; gap: 10px;">
-                    <button type="button" class="btn btn-toggle active" id="legal-type-video" onclick="toggleLegalType('video')"><i class="ph ph-video-camera"></i> Video</button>
-                    <button type="button" class="btn btn-toggle" id="legal-type-image" onclick="toggleLegalType('image')"><i class="ph ph-image"></i> Static Image</button>
-                </div>
-            </div>
-            
             <!-- Video Form -->
             <form id="legal-form" onsubmit="submitLegal(event)">
-                <div class="form-group">
-                    <label>Video File</label>
-                    <label class="file-upload" id="video-upload-2">
-                        <input type="file" name="video" accept="video/*" onchange="handleFileSelect(this, 'video-upload-2')">
-                        <div class="icon"><i class="ph ph-video-camera"></i></div>
-                        <div>Drag & drop or click to select video</div>
-                    </label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+                    <!-- Left: Upload -->
+                    <div class="form-group">
+                        <label>Video File</label>
+                        <label class="file-upload" id="video-upload-2" style="min-height: 180px;">
+                            <input type="file" name="video" accept="video/*" onchange="handleFileSelect(this, 'video-upload-2')">
+                            <div class="icon"><i class="ph ph-video-camera"></i></div>
+                            <div>Drag & drop or click to select video</div>
+                        </label>
+                    </div>
+                    
+                    <!-- Right: Preview -->
+                    <div class="form-group">
+                        <label>Preview</label>
+                        <div id="legal-video-preview-box" style="background: var(--surface-light); border-radius: 12px; min-height: 180px; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; border: 1px solid var(--border-color);">
+                            <video id="legal-video-player" style="width: 100%; height: 180px; object-fit: contain; display: none;" controls></video>
+                            <img id="legal-video-img" style="width: 100%; height: 180px; object-fit: contain; display: none;">
+                            <span id="legal-video-placeholder" style="color: var(--text-muted);"><i class="ph ph-film-strip"></i> Preview will appear here</span>
+                        </div>
+                    </div>
                 </div>
                 
-                <div class="grid-2">
+                <div class="grid-3" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
                     <div class="form-group">
                         <label>Country</label>
                         <select name="country_code">
-                            <option value="FR">🇫🇷 France</option>
+                            <option value="DE">🇩🇪 Germany</option>
+                            <option value="UK">🇬🇧 UK</option>
+                            <option value="IT">🇮🇹 Italy</option>
                             <option value="US">🇺🇸 United States</option>
-                            <option value="VN">🇻🇳 Vietnam</option>
-                            <option value="HK">🇭🇰 Hong Kong</option>
                         </select>
                     </div>
                     <div class="form-group">
                         <label>Media Type</label>
-                        <select name="media_type">
+                        <select name="media_type" onchange="const subtype = this.parentElement.nextElementSibling; subtype.style.opacity = this.value === 'social' ? '1' : '0.4'; subtype.style.pointerEvents = this.value === 'social' ? 'auto' : 'none';">
                             <option value="social">Social Media</option>
                             <option value="tv">TV / Broadcast</option>
                         </select>
                     </div>
-                </div>
-                
-                <div class="form-group">
-                    <label>Position (Optional)</label>
-                    <select name="position">
-                        <option value="">Auto (Default)</option>
-                        <option value="bottom_left">Bottom Left ↙️</option>
-                        <option value="bottom_right">Bottom Right ↘️</option>
-                        <option value="bottom_center">Bottom Center ⬇️</option>
-                        <option value="top_left">Top Left ↖️</option>
-                        <option value="top_right">Top Right ↗️</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" name="auto_detect_product" id="auto-detect-product-video" checked>
-                        <label for="auto-detect-product-video"><i class="ph ph-robot"></i> Auto-detect product type (CLIP AI)</label>
+                    <div class="form-group">
+                        <label>Usage Type</label>
+                        <select name="usage_type">
+                            <option value="shareable">Shareable (Social Feed)</option>
+                            <option value="non_shareable">Non-Shareable (Paid/YT)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="legal-subtype-group">
+                        <label>Post Type (for 9:16)</label>
+                        <select name="sub_type">
+                            <option value="reels">🎬 Reels</option>
+                            <option value="stories">📱 Stories</option>
+                        </select>
                     </div>
                 </div>
+                
+                <!-- Position removed per user request: handled by sub_type/ratio -->
+                
+                <!-- Removed per user request -->
                 
                 <button type="submit" class="btn btn-primary" id="legal-submit">
                     <i class="ph ph-gavel"></i> Add Legal Content
                 </button>
                 
                 <div id="legal-status" class="status-box" style="display: none;"></div>
-            </form>
-            
-            <!-- Image Form -->
-            <form id="legal-image-form" onsubmit="submitLegalImage(event)" style="display: none;">
-                <div class="form-group">
-                    <label>Image (JPG, PNG)</label>
-                    <label class="file-upload" id="image-upload-legal">
-                        <input type="file" name="image" accept="image/*" onchange="handleFileSelect(this, 'image-upload-legal')">
-                        <div class="icon"><i class="ph ph-image"></i></div>
-                        <div>Drag & drop or click to select image</div>
-                    </label>
-                </div>
-                
-                <div class="grid-2">
-                    <div class="form-group">
-                        <label>Country</label>
-                        <select name="country_code">
-                            <option value="FR">🇫🇷 France</option>
-                            <option value="US">🇺🇸 United States</option>
-                            <option value="VN">🇻🇳 Vietnam</option>
-                            <option value="HK">🇭🇰 Hong Kong</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Position</label>
-                        <select name="position">
-                            <option value="bottom_left">Bottom Left ↙️</option>
-                            <option value="bottom_right">Bottom Right ↘️</option>
-                            <option value="bottom_center">Bottom Center ⬇️</option>
-                            <option value="top_left">Top Left ↖️</option>
-                            <option value="top_right">Top Right ↗️</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" name="auto_detect" id="auto-detect-image" checked>
-                        <label for="auto-detect-image"><i class="ph ph-robot"></i> Auto-detect product type (CLIP AI)</label>
-                    </div>
-                </div>
-                
-                <button type="submit" class="btn btn-primary" id="legal-image-submit">
-                    <i class="ph ph-image-square"></i> Add Legal to Image
-                </button>
-                
-                <div id="legal-image-status" class="status-box" style="display: none;"></div>
             </form>
         </div>
         
@@ -737,6 +925,7 @@ Craft. Time. And a story worth savoring."></textarea>
                     <label>Preview</label>
                     <div id="master-preview-container" style="background: var(--surface-light); border-radius: 12px; min-height: 180px; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid var(--border-color);">
                         <video id="master-preview-player" controls style="width: 100%; height: 180px; object-fit: contain; display: none;"></video>
+                        <img id="master-preview-img" style="width: 100%; height: 180px; object-fit: contain; display: none;">
                         <span id="master-preview-placeholder" style="color: var(--text-muted);"><i class="ph ph-film-strip"></i> Preview will appear here</span>
                     </div>
                 </div>
@@ -974,7 +1163,8 @@ Craft. Time. And a story worth savoring."></textarea>
             
             // Toggle tabs
             document.querySelectorAll('.input-tab').forEach(t => t.classList.remove('active'));
-            event.target.classList.add('active');
+            // Note: event is deprecated, better use event arg but keeping context
+            if (window.event) window.event.target.classList.add('active');
             
             // Toggle content
             document.getElementById('text-input').classList.remove('active');
@@ -984,25 +1174,234 @@ Craft. Time. And a story worth savoring."></textarea>
             const target = document.getElementById(mode + '-input');
             if (target) target.classList.add('active');
         }
+
+        async function handleTranslationExcel(input) {
+            if (input.files.length === 0) return;
+            
+            const file = input.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            const uploadContainer = document.getElementById('excel-upload-container');
+            const oldContent = uploadContainer.innerHTML;
+            uploadContainer.innerHTML = '<i class="ph ph-circle-notch ph-spin" style="font-size: 2rem; color: var(--primary);"></i><div style="margin-top:0.5rem">Parsing Excel...</div>';
+            
+            try {
+                const res = await fetch('/api/parse-translation-excel', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    renderTranslationTable(data.rows);
+                    uploadContainer.style.display = 'none';
+                    document.getElementById('translation-table-container').style.display = 'block';
+                } else {
+                    alert('Failed to parse Excel file.');
+                    uploadContainer.innerHTML = oldContent;
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Connection error.');
+                uploadContainer.innerHTML = oldContent;
+            }
+        }
+
+        function renderTranslationTable(rows) {
+            const tbody = document.querySelector('#translation-table tbody');
+            tbody.innerHTML = '';
+            
+            if (!rows || rows.length === 0) {
+                addTranslationRow();
+                return;
+            }
+            
+            rows.forEach((row, idx) => {
+                addTranslationRow(row, idx + 1);
+            });
+        }
+
+        function addTranslationRow(data = {}, index = null) {
+            const tbody = document.querySelector('#translation-table tbody');
+            const rowCount = index || (tbody.children.length + 1);
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid var(--border-color)';
+            
+            const langs = ['en', 'fr', 'es', 'nl', 'ja'];
+            let html = `<td style="padding: 0.8rem; color: var(--text-muted); font-weight: 500;">${rowCount}</td>`;
+            
+            langs.forEach(lang => {
+                const text = data[lang] || '';
+                html += `<td contenteditable="true" data-lang="${lang}" style="padding: 0.8rem; border-left: 1px solid var(--border-color); outline: none; min-width: 150px;">${text}</td>`;
+            });
+            
+            tr.innerHTML = html;
+            tbody.appendChild(tr);
+            
+            // Auto focus if empty row
+            if (!data.en) tr.querySelector('[data-lang="en"]').focus();
+        }
+
+        function toggleSubtitleSettings() {
+            const content = document.getElementById('subtitle-settings');
+            const header = document.querySelector('.settings-header');
+            content.classList.toggle('collapsed');
+            header.classList.toggle('collapsed');
+        }
         
-        function updatePreview(input) {
+        function detectFormat(width, height) {
+            const ratio = width / height;
+            if (ratio > 1.7) return '16x9';      // 16:9 is 1.77
+            if (ratio < 0.6) return '9x16';      // 9:16 is 0.56
+            if (ratio > 0.7 && ratio < 0.9) return '4x5'; // 4:5 is 0.8
+            if (ratio > 0.9 && ratio < 1.1) return '1x1'; // 1:1 is 1.0
+            return '16x9'; // Fallback
+        }
+
+        async function fetchThumbnail(file, imgEl, videoEl, placeholderEl) {
+            placeholderEl.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Generating preview...';
+            placeholderEl.style.display = 'flex';
+            imgEl.style.display = 'none';
+            videoEl.style.display = 'none';
+
+            const formData = new FormData();
+            formData.append('video', file);
+            try {
+                const res = await fetch('/api/video-thumbnail', { method: 'POST', body: formData });
+                if (res.ok) {
+                    const width = parseInt(res.headers.get('X-Video-Width'));
+                    const height = parseInt(res.headers.get('X-Video-Height'));
+                    
+                    const blob = await res.blob();
+                    imgEl.src = URL.createObjectURL(blob);
+                    imgEl.style.display = 'block';
+                    placeholderEl.style.display = 'none';
+                    return { width, height };
+                } else {
+                    placeholderEl.innerHTML = '<i class="ph ph-warning-circle"></i> No preview available';
+                }
+            } catch (e) {
+                placeholderEl.innerHTML = '<i class="ph ph-warning-circle"></i> Preview error';
+            }
+            return null;
+        }
+
+        async function updatePreview(input) {
             if (input.files.length > 0) {
                 const file = input.files[0];
                 const player = document.getElementById('preview-player');
+                const img = document.getElementById('preview-img');
                 const placeholder = document.getElementById('preview-placeholder');
-                if (player && placeholder) {
-                    player.src = URL.createObjectURL(file);
+                const formatInput = document.querySelector('[name="video_format"]');
+                
+                const ext = file.name.split('.').pop().toLowerCase();
+                const isMov = ext === 'mov' || ext === 'qt';
+
+                if (isMov) {
+                    // Instant response for .mov files by skipping heavy thumbnail generation
+                    player.style.display = 'none';
+                    img.style.display = 'none';
+                    placeholder.style.display = 'flex';
+                    placeholder.innerHTML = '<i class="ph ph-file-video" style="font-size: 3rem; color: var(--primary);"></i><div style="margin-top:0.5rem">.MOV File Selected (Ready)</div><div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">Preview disabled for Prores to maximize speed.</div>';
+                    
+                    // Note: Format detection for .mov will happen on the backend during processing
+                } else {
+                    const videoUrl = URL.createObjectURL(file);
+                    player.src = videoUrl;
                     player.style.display = 'block';
+                    img.style.display = 'none';
                     placeholder.style.display = 'none';
+                    
+                    // Get dimensions for standard videos
+                    const tempVideo = document.createElement('video');
+                    tempVideo.src = videoUrl;
+                    tempVideo.onloadedmetadata = () => {
+                        if (formatInput) {
+                            formatInput.value = detectFormat(tempVideo.videoWidth, tempVideo.videoHeight);
+                        }
+                    };
                 }
+                clearSubResults();
             }
         }
+
+        function clearSubResults() {
+            ['subtitle-status', 'batch-status', 'export-status'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.style.display = 'none';
+                    el.innerHTML = '';
+                }
+            });
+        }
+
+        function clearLegalResults() {
+            ['legal-status'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.style.display = 'none';
+                    el.innerHTML = '';
+                }
+            });
+        }
         
-        function handleFileSelect(input, uploadId) {
+        async function handleFileSelect(input, uploadId) {
             const upload = document.getElementById(uploadId);
             if (input.files.length > 0) {
                 upload.classList.add('has-file');
                 upload.querySelector('div:last-child').textContent = input.files[0].name;
+                
+                // Update preview for Legal panel
+                if (uploadId === 'video-upload-2') {
+                    const player = document.getElementById('legal-video-player');
+                    const img = document.getElementById('legal-video-img');
+                    const placeholder = document.getElementById('legal-video-placeholder');
+                    
+                    const file = input.files[0];
+                    const ext = file.name.split('.').pop().toLowerCase();
+                    const isMov = ext === 'mov' || ext === 'qt';
+
+                    if (isMov) {
+                        const dims = await fetchThumbnail(file, img, player, placeholder);
+                        if (dims) {
+                            const format = detectFormat(dims.width, dims.height);
+                            const mediaSelect = document.querySelector('#legal-form select[name="media_type"]');
+                            const usageSelect = document.querySelector('#legal-form select[name="usage_type"]');
+                            if (mediaSelect && format === '9x16') {
+                                mediaSelect.value = 'social';
+                                if (usageSelect) usageSelect.value = 'shareable';
+                            }
+                            // Hide "Post Type" if not 9x16
+                            const subtypeGroup = document.getElementById('legal-subtype-group');
+                            if (subtypeGroup) {
+                                subtypeGroup.style.display = format === '9x16' ? 'block' : 'none';
+                            }
+                        }
+                    } else {
+                        const videoUrl = URL.createObjectURL(file);
+                        player.src = videoUrl;
+                        player.style.display = 'block';
+                        img.style.display = 'none';
+                        if (placeholder) placeholder.style.display = 'none';
+                        
+                        const tempVideo = document.createElement('video');
+                        tempVideo.src = videoUrl;
+                        tempVideo.onloadedmetadata = () => {
+                            const format = detectFormat(tempVideo.videoWidth, tempVideo.videoHeight);
+                            const mediaSelect = document.querySelector('#legal-form select[name="media_type"]');
+                            if (mediaSelect && format === '9x16') {
+                                mediaSelect.value = 'social'; // Auto-select social for vertical videos
+                            }
+                            // Hide "Post Type" if not 9x16
+                            const subtypeGroup = document.getElementById('legal-subtype-group');
+                            if (subtypeGroup) {
+                                subtypeGroup.style.display = format === '9x16' ? 'block' : 'none';
+                            }
+                        };
+                    }
+                    clearLegalResults();
+                }
             }
         }
         
@@ -1026,32 +1425,98 @@ Craft. Time. And a story worth savoring."></textarea>
             let endpoint = '/api/subtitle';
             
             if (currentInputMode === 'text') {
-                const subtitleText = document.getElementById('subtitle-textarea').value.trim();
-                if (!subtitleText) {
-                    alert('Please enter subtitles!');
+                const rows = document.querySelectorAll('#translation-table tbody tr');
+                const translations = {
+                    'en': [], 'fr': [], 'es': [], 'nl': [], 'ja': []
+                };
+                
+                let hasData = false;
+                rows.forEach(row => {
+                    const cells = row.querySelectorAll('[data-lang]');
+                    let rowHasData = false;
+                    cells.forEach(cell => {
+                        const lang = cell.getAttribute('data-lang');
+                        const text = cell.innerText.trim();
+                        translations[lang].push(text);
+                        if (text) {
+                            hasData = true;
+                            rowHasData = true;
+                        }
+                    });
+                });
+                
+                if (!hasData) {
+                    alert('Please upload an Excel file or enter some translations in the table!');
                     return;
                 }
-                formData.set('subtitle_text', subtitleText);
+                
+                formData.set('manual_translations_json', JSON.stringify(translations));
+                // Set primary text from EN column for timing sync
+                formData.set('subtitle_text', translations['en'].join('\n'));
+                
+                const rhythmSegment = document.getElementById('auto-segment-rhythm').checked;
+                formData.set('auto_segment_rhythm', rhythmSegment);
                 endpoint = '/api/subtitle-text';
             }
             
             document.getElementById('subtitle-submit').disabled = true;
-            document.getElementById('subtitle-status').style.display = 'block';
+            const statusBox = document.getElementById('subtitle-status');
+            statusBox.style.display = 'block';
             
-            try {
-                const response = await fetch(endpoint, {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-                
-                if (data.job_id) {
-                    pollJobStatus(data.job_id, 'subtitle-status');
+            const updateUI = (pct, msg, icon = 'ph-circle-notch ph-spin') => {
+                statusBox.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
+                        <h3 style="margin: 0; font-size: 1rem;">Processing Status</h3>
+                        <span class="status-percent" style="font-size: 1.1rem;">${pct}%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="fill" style="width: ${pct}%"></div>
+                    </div>
+                    <div class="status-text">
+                        <span class="status-label">
+                            <i class="ph ${icon}"></i> ${msg}
+                        </span>
+                    </div>
+                `;
+            };
+
+            updateUI(0, 'Preparing upload...');
+
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', endpoint);
+
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) {
+                    const pct = Math.round((e.loaded / e.total) * 100);
+                    // Use a smaller range (0-90) for upload to leave room for backend
+                    const displayPct = Math.round(pct * 0.2); // Just 20% for upload phase
+                    updateUI(displayPct, `Uploading video (${pct}%)...`);
                 }
-            } catch (error) {
-                alert('Error: ' + error.message);
+            };
+
+            xhr.onload = () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    const data = JSON.parse(xhr.responseText);
+                    if (data.job_id) {
+                        pollJobStatus(data.job_id, 'subtitle-status');
+                    }
+                } else {
+                    let errorMsg = 'Backend error';
+                    try {
+                        const err = JSON.parse(xhr.responseText);
+                        errorMsg = err.detail || errorMsg;
+                    } catch(e) {}
+                    alert('Error: ' + errorMsg);
+                    document.getElementById('subtitle-submit').disabled = false;
+                }
+            };
+
+            xhr.onerror = () => {
+                alert('Network error during upload');
                 document.getElementById('subtitle-submit').disabled = false;
-            }
+            };
+
+            xhr.send(formData);
         }
         
         async function submitBatch(e) {
@@ -1124,8 +1589,27 @@ Craft. Time. And a story worth savoring."></textarea>
             const form = e.target;
             const formData = new FormData(form);
             
-            document.getElementById('legal-submit').disabled = true;
-            document.getElementById('legal-status').style.display = 'block';
+            const submitBtn = document.getElementById('legal-submit');
+            const statusBox = document.getElementById('legal-status');
+            
+            submitBtn.disabled = true;
+            statusBox.style.display = 'block';
+            statusBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            statusBox.innerHTML = `
+                <div style="background: var(--surface-light); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color); animation: fadeIn 0.3s ease-out;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
+                        <h3 style="margin: 0; font-size: 1rem; color: var(--primary);">Processing Status</h3>
+                        <span class="status-percent" style="font-size: 1.1rem; font-weight: 700;">0%</span>
+                    </div>
+                    <div class="progress-bar" style="background: rgba(255,255,255,0.05); height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 1rem;">
+                        <div class="fill" style="width: 0%; height: 100%; background: var(--gradient-primary); transition: width 0.3s ease;"></div>
+                    </div>
+                    <div class="status-text">
+                        <span class="status-label" style="color: var(--text-muted); font-size: 0.9rem;"><i class="ph ph-spinner ph-spin"></i> Initializing video upload...</span>
+                    </div>
+                </div>
+            `;
             
             try {
                 const response = await fetch('/api/legal', {
@@ -1136,91 +1620,53 @@ Craft. Time. And a story worth savoring."></textarea>
                 
                 if (data.job_id) {
                     pollJobStatus(data.job_id, 'legal-status');
-                }
-            } catch (error) {
-                alert('Error: ' + error.message);
-            }
-        }
-        
-        // Toggle between Video and Image in Legal panel
-        function toggleLegalType(type) {
-            const videoForm = document.getElementById('legal-form');
-            const imageForm = document.getElementById('legal-image-form');
-            const btnVideo = document.getElementById('legal-type-video');
-            const btnImage = document.getElementById('legal-type-image');
-            
-            if (type === 'video') {
-                videoForm.style.display = 'block';
-                imageForm.style.display = 'none';
-                btnVideo.classList.add('active');
-                btnImage.classList.remove('active');
-            } else {
-                videoForm.style.display = 'none';
-                imageForm.style.display = 'block';
-                btnVideo.classList.remove('active');
-                btnImage.classList.add('active');
-            }
-        }
-        
-        async function submitLegalImage(e) {
-            e.preventDefault();
-            const form = e.target;
-            const formData = new FormData(form);
-            
-            const submitBtn = document.getElementById('legal-image-submit');
-            const statusBox = document.getElementById('legal-image-status');
-            
-            submitBtn.disabled = true;
-            
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Processing...';
-            statusBox.style.display = 'block';
-            statusBox.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Adding legal content to image...';
-            
-            try {
-                const response = await fetch('/api/legal-image', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                if (response.ok) {
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    statusBox.innerHTML = `
-                        <div style="margin-top: 1rem; text-align: center;">
-                            <img src="${url}" style="max-width: 100%; max-height: 400px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); margin-bottom: 1rem;">
-                            <br>
-                            <a href="${url}" download="image_legal.jpg" class="btn download-btn">
-                                <i class="ph ph-download-simple"></i> Download Image
-                            </a>
-                        </div>
-                    `;
                 } else {
-                    const error = await response.json();
-                    statusBox.innerHTML = '<i class="ph ph-x-circle"></i> Error: ' + error.detail;
+                    statusBox.innerHTML = '<i class="ph ph-x-circle"></i> Error: No job ID returned';
+                    submitBtn.disabled = false;
                 }
             } catch (error) {
-                statusBox.innerHTML = '<i class="ph ph-x-circle"></i> Error: ' + error.message;
-            } finally {
+                statusBox.innerHTML = '<i class="ph ph-x-circle"></i> Connection Error: ' + error.message;
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="ph ph-image-square"></i> Add Legal to Image';
             }
         }
         
         // === Mastering AI Functions ===
         let currentSceneJobId = null;
 
-        function updateMasterPreview(input) {
+        async function updateMasterPreview(input) {
             const player = document.getElementById('master-preview-player');
+            const img = document.getElementById('master-preview-img');
             const placeholder = document.getElementById('master-preview-placeholder');
+            
             if (input.files.length > 0) {
-                player.src = URL.createObjectURL(input.files[0]);
-                player.style.display = 'block';
-                if (placeholder) placeholder.style.display = 'none';
+                const file = input.files[0];
+                const ext = file.name.split('.').pop().toLowerCase();
+                const isMov = ext === 'mov' || ext === 'qt';
+
+                if (isMov) {
+                    await fetchThumbnail(file, img, player, placeholder);
+                } else {
+                    const videoUrl = URL.createObjectURL(file);
+                    player.src = videoUrl;
+                    player.style.display = 'block';
+                    img.style.display = 'none';
+                    if (placeholder) placeholder.style.display = 'none';
+                    
+                    // Optional: Get dimensions for master panel if needed
+                    const tempVideo = document.createElement('video');
+                    tempVideo.src = videoUrl;
+                    tempVideo.onloadedmetadata = () => {
+                        console.log("Master Video Dimensions:", tempVideo.videoWidth, "x", tempVideo.videoHeight);
+                    };
+                }
                 clearMasterResults();
             } else {
                 player.style.display = 'none';
-                if (placeholder) placeholder.style.display = '';
+                img.style.display = 'none';
+                if (placeholder) {
+                    placeholder.style.display = '';
+                    placeholder.innerHTML = '<i class="ph ph-monitor-play"></i> Video preview will appear here';
+                }
             }
         }
 
@@ -1235,13 +1681,19 @@ Craft. Time. And a story worth savoring."></textarea>
 
         // === Clear previous master results ===
         function clearMasterResults() {
-            ['status-smartcut', 'status-logo'].forEach(id => {
+            ['status-smartcut', 'status-logo', 'master-status', 'v-status-area', 'm-status-area'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) {
-                    el.className = 'card-status';
+                    el.className = el.id.includes('status-') ? 'card-status' : '';
+                    if (!el.className) el.style.display = 'none';
                     el.innerHTML = '';
                     el.style.flexDirection = '';
                 }
+            });
+            // Also hide result areas
+            ['m-result-area', 'v-result-area'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = 'none';
             });
         }
 
@@ -1264,7 +1716,8 @@ Craft. Time. And a story worth savoring."></textarea>
 
                     if (statusEl) {
                         statusEl.className = 'card-status active';
-                        statusEl.innerHTML = `<i class="ph ph-spinner ph-spin"></i> Processing... ${job.progress}%`;
+                        const msg = job.message || 'Processing...';
+                        statusEl.innerHTML = `<i class="ph ph-spinner ph-spin"></i> ${msg} ${job.progress}%`;
                     }
 
                     if (job.status === 'completed') {
@@ -1642,7 +2095,11 @@ Craft. Time. And a story worth savoring."></textarea>
             const poll = async () => {
                 const res = await fetch('/api/jobs/' + jobId);
                 const job = await res.json();
+                const msg = job.message || 'Processing...';
                 document.getElementById('v-progress-fill').style.width = job.progress + '%';
+                // If there's a label for video inpaint progress text, update it too
+                const label = document.querySelector('#v-status-area .status-label');
+                if (label) label.textContent = msg + ' ' + job.progress + '%';
                 if (job.status === 'completed') {
                     document.getElementById('v-result-area').style.display = 'block';
                     document.getElementById('v-result-preview').src = job.result_url;
@@ -1734,27 +2191,53 @@ Craft. Time. And a story worth savoring."></textarea>
                     const response = await fetch('/api/jobs/' + jobId);
                     const job = await response.json();
                     
+                    const progress = job.progress || 0;
                     let html = `
-                        <h3>Processing Status</h3>
-                        <div class="progress-bar">
-                            <div class="fill" style="width: ${job.progress}%"></div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
+                            <h3 style="margin: 0; font-size: 1rem; color: var(--primary);">Processing Status</h3>
+                            <span class="status-percent" style="font-size: 1.1rem; font-weight: 700;">${progress}%</span>
+                        </div>
+                        <div class="progress-bar" style="background: rgba(255,255,255,0.05); height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 1rem;">
+                            <div class="fill" style="width: ${progress}%; height: 100%; background: var(--gradient-primary); transition: width 0.3s ease;"></div>
                         </div>
                         <div class="status-text">
                             <span class="status-label ${job.status === 'completed' ? 'status-completed' : ''} ${job.status === 'failed' ? 'status-failed' : ''}">
-                                ${job.status === 'completed' ? '<i class="ph ph-check-circle"></i> Completed!' : job.status === 'failed' ? '<i class="ph ph-x-circle"></i> Error: ' + job.error : '<i class="ph ph-hourglass"></i> Processing...'}
+                                ${job.status === 'completed' ? '<i class="ph ph-check-circle"></i> Completed!' : job.status === 'failed' ? '<i class="ph ph-x-circle"></i> Error: ' + job.error : '<i class="ph ph-hourglass-high"></i> ' + (job.message || 'Processing...')}
                             </span>
-                            <span class="status-percent">${job.progress}%</span>
                         </div>
                     `;
                     
                     if (job.status === 'completed') {
-                        const downloadUrl = `/api/download/${jobId}`;
-                        const isVideo = job.result_path && job.result_path.endsWith('.mp4');
+                        const downloadUrl = `/api/download/${jobId}?t=${Date.now()}`;
+                        const resultPath = (job.result_path || "").toLowerCase();
+                        const isVideo = resultPath.endsWith('.mp4') || resultPath.endsWith('.mov') || resultPath.endsWith('.qt') || resultPath.endsWith('.mkv') || resultPath.endsWith('.avi') || resultPath.endsWith('.webm');
+                        const hasMultipleResults = job.result_files && job.result_files.length > 1;
                         
-                        if (isVideo) {
+                        if (isVideo && !hasMultipleResults) {
+                            const isProRes = resultPath.endsWith('.mov') || resultPath.endsWith('.qt');
+                            const mainLabel = (job.result_files && job.result_files[0]) ? job.result_files[0].label : 'Result Video';
+                            // Convert outputs/path/to/file.mp4 to /api/video/path/to/file.mp4
+                            const videoUrl = "/" + job.result_path.replace(/^outputs\//, "api/video/");
+                            
                             html += `
                                 <div style="margin-top: 1.5rem; background: var(--surface-light); border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color);">
-                                    <video controls src="${downloadUrl}" style="width: 100%; max-height: 400px; background: #000; display: block;"></video>
+                                    <div style="padding: 0.8rem 1rem; border-bottom: 1px solid var(--border-color); font-weight: 600; font-size: 0.9rem; color: var(--primary); display: flex; justify-content: space-between; align-items: center;">
+                                        <span><i class="ph ph-video"></i> ${mainLabel}</span>
+                                        ${isProRes ? '<span style="background: var(--warning); color: #000; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem;">PRO FORMAT</span>' : ''}
+                                    </div>
+                                    
+                                    ${isProRes ? `
+                                        <div style="height: 240px; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; padding: 2rem; text-align: center;">
+                                            <i class="ph ph-monitor-play" style="font-size: 3rem; color: var(--warning);"></i>
+                                            <div>
+                                                <div style="font-weight: 600; margin-bottom: 0.3rem;">Professional Format (ProRes)</div>
+                                                <div style="font-size: 0.85rem; color: var(--text-muted);">Browsers cannot preview professional codecs. Please download to view in high quality.</div>
+                                            </div>
+                                        </div>
+                                    ` : `
+                                        <video controls preload="auto" playsinline src="${videoUrl}" style="width: 100%; max-height: 400px; background: #000; display: block;"></video>
+                                    `}
+                                    
                                     <div style="padding: 1rem; display: flex; align-items: center; gap: 1rem;">
                                         <a href="${downloadUrl}" download class="btn btn-primary" style="flex: 1; justify-content: center; text-decoration: none;">
                                             <i class="ph ph-download-simple"></i> Download Video
@@ -1763,18 +2246,26 @@ Craft. Time. And a story worth savoring."></textarea>
                                 </div>
                             `;
                         }
-                        
-                        // Also handle multi-file results
-                        if (job.result_files && job.result_files.length > 0) {
+                        // Also handle multi-file results (OR single result if not shown as featured video)
+                        else if (job.result_files && job.result_files.length > 0) {
                             html += '<div style="margin-top: 1rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">';
                             job.result_files.forEach((file, index) => {
                                 const fileUrl = `/api/download/${jobId}/${index}`;
-                                html += `
+                                const filePath = (file.path || "").toLowerCase();
+                                const isProResFile = filePath.endsWith('.mov') || filePath.endsWith('.qt');
+                                
+                                        html += `
                                     <div style="background: var(--surface-light); border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color);">
-                                        ${file.type === 'video' ? `
-                                            <video controls src="${fileUrl}" style="width: 100%; height: 160px; object-fit: cover; background: #000;"></video>
+                                        ${file.type === 'video' ? (isProResFile ? `
+                                            <div style="height: 160px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #000; color: var(--warning); gap: 0.5rem; padding: 1rem; text-align: center;">
+                                                <i class="ph ph-monitor-play" style="font-size: 2rem;"></i>
+                                                <div style="font-size: 0.75rem; font-weight: 600;">ProRes Video</div>
+                                                <div style="font-size: 0.65rem; color: var(--text-muted);">Preview Not Supported</div>
+                                            </div>
                                         ` : `
-                                            <div style="height: 100px; display: flex; align-items: center; justify-content: center; background: rgba(59, 130, 246, 0.05); color: var(--primary);">
+                                            <video controls preload="auto" playsinline src="/${file.path.replace(/^outputs\//, 'api/video/')}" style="width: 100%; height: 160px; object-fit: cover; background: #000;"></video>
+                                        `) : `
+                                            <div style="height: 160px; display: flex; align-items: center; justify-content: center; background: rgba(59, 130, 246, 0.05); color: var(--primary);">
                                                 <i class="ph ph-file-text" style="font-size: 2.5rem;"></i>
                                             </div>
                                         `}
@@ -1810,6 +2301,22 @@ Craft. Time. And a story worth savoring."></textarea>
             };
             
             poll();
+        }
+        
+        function updateFormatInfo(val) {
+            const infoText = document.getElementById('format-info-text');
+            const infoBox = document.getElementById('format-info-box');
+            
+            if (val === 'mp4_standard') {
+                infoText.textContent = "Ideal for web sharing and general review.";
+                infoBox.style.color = "var(--text-muted)";
+            } else if (val === 'prores') {
+                infoText.textContent = "Production quality (HQ 422). File will be large (.mov).";
+                infoBox.style.color = "var(--warning)";
+            } else if (val === 'mp4_20mbps') {
+                infoText.textContent = "High quality CBR 20Mbps for professional digital delivery.";
+                infoBox.style.color = "var(--success)";
+            }
         }
     </script>
 </body>

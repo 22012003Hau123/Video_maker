@@ -1,0 +1,30 @@
+{
+  "country_code": "IT",
+  "country_name": "Italy",
+  "language": "it",
+  "default_font": "Oswald",
+  "rules": [
+    {
+      "type": "alcohol",
+      "platform": "all",
+      "media_types": ["video"],
+      "duration_rules": {
+        "all": {
+          "text": "Beva Responsabilmente",
+          "timing": "entire_duration",
+          "position": "bottom",
+          "min_display_duration": 0.0
+        },
+        "stories": {
+          "text": "Beva Responsabilmente",
+          "timing": "first_5s",
+          "position": "bottom"
+        }
+      },
+      "style": {
+        "font": "Oswald",
+        "font_color": "#FFFFFF"
+      }
+    }
+  ]
+}

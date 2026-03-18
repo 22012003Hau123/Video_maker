@@ -12,7 +12,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class MediaType(Enum):
+class MediaType(str, Enum):
     """Loại media"""
     SOCIAL = "social"           # Mạng xã hội
     TV = "tv"                   # Truyền hình
@@ -21,7 +21,7 @@ class MediaType(Enum):
     PRINT = "print"             # In ấn
     
 
-class UsageType(Enum):
+class UsageType(str, Enum):
     """Hình thức sử dụng"""
     SHAREABLE = "shareable"     # Có thể chia sẻ
     NON_SHAREABLE = "non_shareable"  # Không chia sẻ
@@ -38,11 +38,13 @@ class LegalContent:
     text: str                   # Nội dung pháp lý
     text_secondary: Optional[str] = None  # Nội dung bổ sung
     min_duration: float = 0     # Thời lượng tối thiểu để áp dụng (giây)
-    position: str = "bottom"    # Vị trí: top, bottom, full_screen
-    display_at: str = "end"     # Hiển thị: start, end, both
+    position: str = "bottom"    # Vị trí: top, bottom, center, bottom_left, etc.
+    display_at: str = "end"     # Hiển thị: start, end, both, entire, first_5s, last_5s
     font_size: int = 24
     duration_on_screen: float = 3.0  # Thời gian hiển thị (giây)
     product_type: str = "alcohol"  # Loại sản phẩm: alcohol, tobacco, pharmaceutical, food
+    font_family: str = "Arial"
+    sub_type: Optional[str] = None    # reels, stories
     
 
 @dataclass 
@@ -59,56 +61,6 @@ class LegalDatabase:
     
     # Nội dung pháp lý mặc định cho ngành rượu
     DEFAULT_LEGAL_CONTENTS = {
-        "VN": CountryLegalConfig(
-            country_code="VN",
-            country_name="Việt Nam",
-            default_disclaimer="Uống rượu bia có hại cho sức khỏe. Cấm bán cho người dưới 18 tuổi.",
-            legal_contents=[
-                LegalContent(
-                    country_code="VN",
-                    media_type=MediaType.SOCIAL,
-                    usage_type=UsageType.SHAREABLE,
-                    text="Uống rượu bia có hại cho sức khỏe",
-                    min_duration=0,
-                    position="bottom",
-                    display_at="end"
-                ),
-                LegalContent(
-                    country_code="VN",
-                    media_type=MediaType.TV,
-                    usage_type=UsageType.PAID,
-                    text="Uống rượu bia có hại cho sức khỏe. Cấm bán cho người dưới 18 tuổi.",
-                    text_secondary="Đã uống rượu bia, không lái xe.",
-                    min_duration=30,
-                    position="bottom",
-                    display_at="both"
-                ),
-            ]
-        ),
-        "FR": CountryLegalConfig(
-            country_code="FR",
-            country_name="France",
-            default_disclaimer="L'abus d'alcool est dangereux pour la santé. À consommer avec modération.",
-            legal_contents=[
-                LegalContent(
-                    country_code="FR",
-                    media_type=MediaType.SOCIAL,
-                    usage_type=UsageType.SHAREABLE,
-                    text="L'abus d'alcool est dangereux pour la santé",
-                    position="bottom",
-                    display_at="end"
-                ),
-                LegalContent(
-                    country_code="FR",
-                    media_type=MediaType.TV,
-                    usage_type=UsageType.PAID,
-                    text="L'abus d'alcool est dangereux pour la santé. À consommer avec modération.",
-                    min_duration=30,
-                    position="bottom",
-                    display_at="both"
-                ),
-            ]
-        ),
         "US": CountryLegalConfig(
             country_code="US",
             country_name="United States",
@@ -130,21 +82,6 @@ class LegalDatabase:
                     min_duration=30,
                     position="bottom",
                     display_at="both"
-                ),
-            ]
-        ),
-        "HK": CountryLegalConfig(
-            country_code="HK",
-            country_name="Hong Kong",
-            default_disclaimer="Drinking alcohol is harmful to health.",
-            legal_contents=[
-                LegalContent(
-                    country_code="HK",
-                    media_type=MediaType.SOCIAL,
-                    usage_type=UsageType.SHAREABLE,
-                    text="Drinking alcohol is harmful to health",
-                    position="bottom",
-                    display_at="end"
                 ),
             ]
         ),
@@ -176,51 +113,84 @@ class LegalDatabase:
                     legal_contents = []
                     for rule in data.get('rules', []):
                         for duration_key, duration_config in rule.get('duration_rules', {}).items():
-                            # Determine min_duration based on key
+                            # Determine min_duration and sub_type
                             min_duration = 0
-                            if duration_key == '30s_and_above':
+                            sub_type = None
+                            
+                            if '30s' in duration_key:
                                 min_duration = 30
-                            elif duration_key == '60s_and_above':
+                            elif '60s' in duration_key:
                                 min_duration = 60
-                            elif duration_key.startswith('under_'):
+                            elif duration_key == 'stories':
+                                sub_type = 'stories'
+                            elif duration_key == 'reels':
+                                sub_type = 'reels'
+                            elif duration_key == 'all':
                                 min_duration = 0
                             
-                            # Get text (support bilingual)
                             text = duration_config.get('text', '')
-                            if not text and duration_config.get('bilingual'):
-                                text = duration_config.get('text_zh', '') + ' / ' + duration_config.get('text_en', '')
+                            text_secondary = duration_config.get('secondary_text', None)
                             
                             # Map media types
-                            for media_type_str in rule.get('media_types', ['video']):
-                                media_type = MediaType.DIGITAL
-                                if media_type_str == 'video':
+                            media_platforms = rule.get('media_types', [])
+                            if not media_platforms and rule.get('platform'):
+                                media_platforms = [rule.get('platform')]
+                            
+                            if not media_platforms: media_platforms = ['social']
+
+                            for platform in media_platforms:
+                                media_type = MediaType.SOCIAL
+                                if platform == 'tv' or platform == 'youtube':
                                     media_type = MediaType.TV
-                                elif media_type_str == 'print':
+                                elif platform == 'print':
                                     media_type = MediaType.PRINT
-                                elif media_type_str == 'digital':
+                                elif platform == 'digital':
                                     media_type = MediaType.DIGITAL
+                                elif platform == 'all':
+                                    media_type = MediaType.SOCIAL # Fallback or handle specially
                                 
-                                # Determine display_at
-                                display_at = 'end'
-                                if duration_config.get('show_at_start') and duration_config.get('show_at_end'):
+                                # Determine display_at from timing or legacy fields
+                                timing = duration_config.get('timing', 'end')
+                                if timing == 'both_5s':
                                     display_at = 'both'
-                                elif duration_config.get('show_at_start'):
+                                elif timing == 'first_5s':
                                     display_at = 'start'
+                                elif timing == 'last_5s':
+                                    display_at = 'end'
+                                elif timing == 'entire_duration':
+                                    display_at = 'entire'
+                                else:
+                                    # Legacy check
+                                    if duration_config.get('show_at_start') and duration_config.get('show_at_end'):
+                                        display_at = 'both'
+                                    elif duration_config.get('show_at_start'):
+                                        display_at = 'start'
+                                    else:
+                                        display_at = 'end'
                                 
                                 style = rule.get('style', {})
-                                rule_type = rule.get('type', 'alcohol')  # Get product type from JSON
+                                rule_type = rule.get('type', 'alcohol')
                                 
+                                usage_type_str = rule.get('usage_type', 'paid')
+                                try:
+                                    usage_type = UsageType(usage_type_str)
+                                except:
+                                    usage_type = UsageType.PAID
+
                                 legal_contents.append(LegalContent(
                                     country_code=country_code,
                                     media_type=media_type,
-                                    usage_type=UsageType.PAID,
+                                    usage_type=usage_type,
                                     text=text,
+                                    text_secondary=text_secondary,
                                     min_duration=min_duration,
                                     position=duration_config.get('position', 'bottom'),
                                     display_at=display_at,
                                     font_size=style.get('font_size', 14),
-                                    duration_on_screen=duration_config.get('min_display_duration', 3.0),
-                                    product_type=rule_type
+                                    duration_on_screen=duration_config.get('min_display_duration', 5.0),
+                                    product_type=rule_type,
+                                    font_family=style.get('font', data.get('default_font', 'Arial')),
+                                    sub_type=sub_type
                                 ))
                     
                     # Create or update country config
@@ -242,10 +212,11 @@ class LegalDatabase:
         media_type: MediaType,
         usage_type: UsageType,
         video_duration: float = 0,
-        product_type: Optional[str] = None
-    ) -> Optional[LegalContent]:
+        product_type: Optional[str] = None,
+        sub_type: Optional[str] = None
+    ) -> List[LegalContent]:
         """
-        Lấy nội dung pháp lý phù hợp
+        Lấy danh sách nội dung pháp lý phù hợp
         
         Args:
             country_code: Mã quốc gia (VN, FR, US, etc.)
@@ -253,9 +224,10 @@ class LegalDatabase:
             usage_type: Hình thức sử dụng
             video_duration: Thời lượng video (giây)
             product_type: Loại sản phẩm (alcohol, tobacco, pharmaceutical, food) - từ CLIP
+            sub_type: stories, reels
             
         Returns:
-            LegalContent phù hợp hoặc None
+            Danh sách LegalContent phù hợp
         """
         country_code = country_code.upper()
         if country_code not in self.countries:
@@ -277,6 +249,10 @@ class LegalDatabase:
         for lc in config.legal_contents:
             # Check media type and usage type first
             if lc.media_type == media_type and lc.usage_type == usage_type:
+                # Check sub_type if specified
+                if sub_type and lc.sub_type and lc.sub_type != sub_type:
+                    continue
+                
                 if video_duration >= lc.min_duration:
                     # Filter by product_type if specified
                     if product_type:
@@ -290,18 +266,21 @@ class LegalDatabase:
                             matching.append(lc)
         
         if matching:
-            # Chọn content có min_duration cao nhất phù hợp
-            return max(matching, key=lambda x: x.min_duration)
+            # Tìm min_duration cao nhất mà video đạt được
+            max_satisfied_min_dur = max(lc.min_duration for lc in matching)
+            # Trả về TẤT CẢ các luật khớp với mốc thời gian đó (để hỗ trợ cả start và end)
+            best_matches = [lc for lc in matching if lc.min_duration == max_satisfied_min_dur]
+            return best_matches
         
         # Fallback: trả về disclaimer mặc định
-        return LegalContent(
+        return [LegalContent(
             country_code=country_code,
             media_type=media_type,
             usage_type=usage_type,
             text=config.default_disclaimer,
             position="bottom",
             display_at="end"
-        )
+        )]
     
     def get_countries(self) -> List[str]:
         """Lấy danh sách quốc gia được hỗ trợ"""

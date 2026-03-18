@@ -3,6 +3,14 @@
 # ============================================
 
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: video-subtitles-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+
   app:
     build:
       context: .
@@ -19,6 +27,10 @@ services:
       - DEBUG=False
       - UPLOAD_DIR=/app/uploads
       - OUTPUT_DIR=/app/outputs
+      - REDIS_URL=redis://redis:6379/0
+      - QUEUE_NAME=video_jobs
+    depends_on:
+      - redis
     volumes:
       # Persist uploads and outputs
       - uploads_data:/app/uploads
@@ -40,6 +52,29 @@ services:
         reservations:
           memory: 1G
 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: video-subtitles-worker
+    restart: unless-stopped
+    command: ["rq", "worker", "video_jobs", "--url", "redis://redis:6379/0"]
+    env_file:
+      - .env
+    environment:
+      - UPLOAD_DIR=/app/uploads
+      - OUTPUT_DIR=/app/outputs
+      - REDIS_URL=redis://redis:6379/0
+      - QUEUE_NAME=video_jobs
+    depends_on:
+      - redis
+    volumes:
+      - uploads_data:/app/uploads
+      - outputs_data:/app/outputs
+      - ./data/fonts:/app/data/fonts:ro
+      - ./data/legal_templates:/app/data/legal_templates:ro
+
 volumes:
   uploads_data:
   outputs_data:
+  redis_data:

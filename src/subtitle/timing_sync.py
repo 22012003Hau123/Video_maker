@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 from dataclasses import dataclass
 import json
+from src.utils.text import smart_line_break
 
 logger = logging.getLogger(__name__)
 
@@ -58,23 +59,24 @@ class TimingSync:
             self.model = whisper.load_model(self.model_size)
         return self.model
     
-    def transcribe(self, audio_path: str, language: str = "vi") -> List[TranscriptSegment]:
+    def transcribe(self, audio_path: str, language: str = "auto", prompt: Optional[str] = None) -> Tuple[List[TranscriptSegment], str]:
         """
         Transcribe audio và lấy timing
         
         Args:
             audio_path: Đường dẫn file audio/video
-            language: Mã ngôn ngữ (vi, en, ja, etc.)
+            language: Mã ngôn ngữ (vi, en, ja, etc.) hoặc "auto" để tự động nhận diện
+            prompt: Text gợi ý cho Whisper (giúp nhận diện brand name tốt hơn)
             
         Returns:
-            Danh sách TranscriptSegment với timing
+            Tuple (Danh sách TranscriptSegment với timing, Mã ngôn ngữ đã nhận diện)
         """
         if self.use_local:
-            return self._transcribe_local(audio_path, language)
+            return self._transcribe_local(audio_path, language, prompt)
         else:
-            return self._transcribe_api(audio_path, language)
+            return self._transcribe_api(audio_path, language, prompt)
     
-    def _transcribe_local(self, audio_path: str, language: str) -> List[TranscriptSegment]:
+    def _transcribe_local(self, audio_path: str, language: str, prompt: Optional[str] = None) -> Tuple[List[TranscriptSegment], str]:
         """Transcribe sử dụng Whisper local"""
         model = self._load_local_model()
         if model is None:
@@ -82,10 +84,12 @@ class TimingSync:
         
         result = model.transcribe(
             audio_path,
-            language=language,
-            word_timestamps=True
+            language=language if language != "auto" else None,
+            word_timestamps=True,
+            initial_prompt=prompt
         )
         
+        detected_lang = result.get("language", language)
         segments = []
         for seg in result.get("segments", []):
             segments.append(TranscriptSegment(
@@ -95,9 +99,9 @@ class TimingSync:
                 confidence=seg.get("no_speech_prob", 0)
             ))
         
-        return segments
+        return segments, detected_lang
     
-    def _transcribe_api(self, audio_path: str, language: str) -> List[TranscriptSegment]:
+    def _transcribe_api(self, audio_path: str, language: str, prompt: Optional[str] = None) -> Tuple[List[TranscriptSegment], str]:
         """Transcribe sử dụng OpenAI Whisper API"""
         client = self._get_openai_client()
         
@@ -105,10 +109,13 @@ class TimingSync:
             response = client.audio.transcriptions.create(
                 model="whisper-1",
                 file=audio_file,
-                language=language,
+                language=language if language != "auto" else None,
+                prompt=prompt,
                 response_format="verbose_json",
                 timestamp_granularities=["word", "segment"]
             )
+        
+        detected_lang = getattr(response, 'language', language)
         
         # Xây dựng word-level timing map để refine segment timing
         word_timings = []
@@ -178,15 +185,15 @@ class TimingSync:
                 text=text
             ))
         
-        return segments
+        return segments, detected_lang
     
     def align_subtitles(
         self, 
         subtitles: List[str], 
         transcript: List[TranscriptSegment],
-        min_duration: float = 1.5,
-        max_duration: float = 7.0
-    ) -> List[Tuple[float, float, str]]:
+        min_duration: float = 0.5,
+        max_duration: float = 8.0
+    ) -> List[Tuple[float, float, str, int]]:
         """
         Căn timing cho danh sách phụ đề dựa trên transcript
         Sử dụng GPT để mapping chính xác từng câu phụ đề với timeline
@@ -198,7 +205,7 @@ class TimingSync:
             max_duration: Thời gian hiển thị tối đa (giây)
             
         Returns:
-            List of (start_time, end_time, subtitle_text)
+            List of (start_time, end_time, subtitle_text, original_index)
         """
         if not transcript:
             total_duration = 60.0
@@ -214,90 +221,132 @@ class TimingSync:
             })
         
         logger.info(f"Transcript segments: {len(timeline_data)}")
-        for t in timeline_data:
-            logger.info(f"  [{t['start']:.1f}s - {t['end']:.1f}s]: {t['text']}")
         
-        # Thử dùng GPT để mapping thông minh
+        # Perform semantic alignment regardless of match counts
+        # This prevents mis-alignment when counts match but content doesn't (e.g. merged segments)
         try:
-            aligned = self._align_with_gpt(subtitles, timeline_data, min_duration, max_duration)
+            aligned = self._align_with_gpt_by_index(subtitles, timeline_data, min_duration, max_duration)
             if aligned:
                 return aligned
         except Exception as e:
-            logger.warning(f"GPT alignment failed: {e}")
+            logger.warning(f"GPT index mapping failed: {e}")
         
-        # Fallback: phân bổ đều theo thời gian transcript
-        total_duration = transcript[-1].end if transcript else 30.0
-        return self._distribute_evenly(subtitles, 0, total_duration, min_duration)
-    
-    def _align_with_gpt(
+        # Fallback: distribute evenly across the found timeline slots
+        if timeline_data:
+            total_start = timeline_data[0]["start"]
+            total_end = timeline_data[-1].get("end", total_start + 5)
+            return self._distribute_evenly(subtitles, total_start, total_end, min_duration)
+        
+        return self._distribute_evenly(subtitles, 0, 30.0, min_duration)
+
+    def _align_with_gpt_by_index(
         self,
         subtitles: List[str],
         timeline: List[dict],
         min_duration: float,
         max_duration: float
-    ) -> List[Tuple[float, float, str]]:
-        """Dùng GPT để mapping chính xác subtitles với timeline"""
+    ) -> List[Tuple[float, float, str, int]]:
+        """Dùng GPT để khớp Index của subtitle với Index của timeline slot"""
         client = self._get_openai_client()
         
-        prompt = f"""Map these subtitles to the video transcript timeline.
+        # Đánh số các slot để AI chọn cho dễ
+        indexed_timeline = []
+        for i, t in enumerate(timeline):
+            indexed_timeline.append({
+                "slot_id": i,
+                "start": t["start"],
+                "end": t["end"],
+                "audio_content": t["text"]
+            })
 
-TRANSCRIPT TIMELINE (with timestamps):
-{json.dumps(timeline, ensure_ascii=False, indent=2)}
+        prompt = f"""Map these {len(subtitles)} SUBTITLES to the {len(indexed_timeline)} AUDIO VOICE SLOTS.
 
-SUBTITLES TO ALIGN:
-{json.dumps(subtitles, ensure_ascii=False)}
+AUDIO VOICE SLOTS (Speech from video):
+{json.dumps(indexed_timeline, ensure_ascii=False, indent=2)}
+
+SUBTITLES TO MAP:
+{json.dumps(subtitles, ensure_ascii=False, indent=2)}
 
 TASK:
-For each subtitle, find when it should appear based on the transcript timing.
-- Match based on meaning/content, not exact words
-- Each subtitle should have a unique time range
-- Subtitles should appear in sequence (no overlapping)
-- Duration should be {min_duration}-{max_duration} seconds
-
-Return a JSON array with this format:
-[
-  {{"start": 0.0, "end": 2.5, "text": "subtitle 1"}},
-  {{"start": 2.5, "end": 5.0, "text": "subtitle 2"}}
-]
-
-Return ONLY the JSON array."""
+1. CONTENT MATCHING IS TOP PRIORITY: Compare the subtitle text with the `audio_content`. If a slot contains text for multiple consecutive subtitles, map ALL those indices to that SAME slot ID.
+2. ANCHORING: Look for unique keywords (e.g. "Belvedere", names, numbers) to anchor subtitles to the correct slots. Do not map a subtitle to a slot if the text clearly doesn't match.
+3. HANDLING MERGED AUDIO: If Whisper merges the first two phrases into Slot 0, you MUST map both Subtitle 0 and Subtitle 1 to Slot 0.
+4. REPETITIONS: Reuse subtitle indices for every occurrence in the audio.
+5. Return ONLY a JSON array: [ {{ "subtitle_index": X, "slot_indices": [Y] }}, ... ]"""
 
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are a professional subtitle timing specialist. Output only valid JSON."},
+                {"role": "system", "content": "You are a professional subtitle technical specialist. Output ONLY valid JSON array of indices."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.2,
-            max_tokens=2000
+            temperature=0.0
         )
         
-        result = response.choices[0].message.content.strip()
+        result_text = response.choices[0].message.content.strip()
+        if result_text.startswith("```"):
+            result_text = result_text.split("```")[1]
+            if result_text.startswith("json"):
+                result_text = result_text[4:]
         
-        # Parse JSON
-        if result.startswith("```"):
-            result = result.split("```")[1]
-            if result.startswith("json"):
-                result = result[4:]
-        result = result.strip()
+        mapping = json.loads(result_text.strip())
         
-        aligned_data = json.loads(result)
+        # 1. Gather all mapping segments
+        raw_segments = []
+        for item in mapping:
+            sub_idx = item.get("subtitle_index")
+            slot_ids = item.get("slot_indices", [])
+            if sub_idx is None or sub_idx >= len(subtitles): continue
+            valid_slot_ids = [s for s in slot_ids if 0 <= s < len(timeline)]
+            if not valid_slot_ids: continue
+            
+            raw_segments.append({
+                "sub_idx": sub_idx,
+                "slot_ids": valid_slot_ids,
+                "text": subtitles[sub_idx]
+            })
+            
+        # 2. Sort by slot order (chronological) then sub_idx
+        raw_segments.sort(key=lambda x: (min(x['slot_ids']), x['sub_idx']))
         
+        # 3. Handle Many-to-One: Sub-divide slots if multiple segments share them
         aligned = []
-        for item in aligned_data:
-            start = float(item["start"])
-            end = float(item["end"])
-            text = item["text"]
+        i = 0
+        while i < len(raw_segments):
+            # Find a group of segments that share the EXACT SAME slot range
+            group = [raw_segments[i]]
+            j = i + 1
+            while j < len(raw_segments) and raw_segments[j]['slot_ids'] == raw_segments[i]['slot_ids']:
+                group.append(raw_segments[j])
+                j += 1
             
-            # Validate timing
-            if end - start < min_duration:
-                end = start + min_duration
-            if end - start > max_duration:
-                end = start + max_duration
+            start_t = timeline[min(raw_segments[i]['slot_ids'])]["start"]
+            end_t = timeline[max(raw_segments[i]['slot_ids'])]["end"]
+            duration = end_t - start_t
             
-            aligned.append((start, end, text))
-            logger.info(f"GPT Aligned: '{text[:30]}' -> {start:.1f}s - {end:.1f}s")
-        
+            if len(group) == 1:
+                aligned.append((start_t, end_t, group[0]['text'], group[0]['sub_idx']))
+            else:
+                # Sub-divide duration based on text length to avoid overlapping
+                total_len = sum(len(g['text']) for g in group)
+                if total_len == 0: total_len = len(group)
+                
+                curr_t = start_t
+                for group_item in group:
+                    g_dur = (len(group_item['text']) / total_len) * duration
+                    # Ensure it doesn't get too short
+                    g_dur = max(g_dur, min(min_duration, duration / len(group)))
+                    
+                    final_end = curr_t + g_dur
+                    if final_end > end_t and len(group) > 1: final_end = end_t # Cap to total
+                    
+                    aligned.append((curr_t, final_end, group_item['text'], group_item['sub_idx']))
+                    curr_t += g_dur
+            
+                logger.info(f"Sub-divided slot {raw_segments[i]['slot_ids']} for {len(group)} subtitles.")
+            
+            i = j
+            
         return aligned
     
     def _find_best_matching_segment(
@@ -348,10 +397,10 @@ Return ONLY the JSON array."""
     
     def _fill_missing_timings(
         self,
-        aligned: List[Tuple[Optional[float], Optional[float], str]],
+        aligned: List[Tuple[Optional[float], Optional[float], str, int]],
         transcript: List[TranscriptSegment],
         min_duration: float
-    ) -> List[Tuple[float, float, str]]:
+    ) -> List[Tuple[float, float, str, int]]:
         """Điền timing cho các subtitle chưa có"""
         result = []
         
@@ -362,13 +411,13 @@ Return ONLY the JSON array."""
             total_duration = len(aligned) * 3
         
         # Tìm các khoảng thời gian đã được sử dụng
-        used_times = [(start, end) for start, end, _ in aligned if start is not None]
+        used_times = [(start, end) for start, end, _, _ in aligned if start is not None]
         
         # Điền timing cho subtitle chưa có
         last_end = 0
-        for i, (start, end, text) in enumerate(aligned):
+        for i, (start, end, text, original_idx) in enumerate(aligned):
             if start is not None:
-                result.append((start, end, text))
+                result.append((start, end, text, original_idx))
                 last_end = end
             else:
                 # Tìm khoảng trống tiếp theo
@@ -379,7 +428,7 @@ Return ONLY the JSON array."""
                 if new_end > total_duration:
                     new_end = total_duration
                 
-                result.append((new_start, new_end, text))
+                result.append((new_start, new_end, text, original_idx))
                 last_end = new_end
         
         return result
@@ -390,7 +439,7 @@ Return ONLY the JSON array."""
         start_time: float, 
         end_time: float,
         min_duration: float
-    ) -> List[Tuple[float, float, str]]:
+    ) -> List[Tuple[float, float, str, int]]:
         """Chia đều thời gian cho các phụ đề"""
         if not subtitles:
             return []
@@ -401,9 +450,9 @@ Return ONLY the JSON array."""
         result = []
         current_time = start_time
         
-        for sub in subtitles:
+        for i, sub in enumerate(subtitles):
             sub_end = current_time + duration_per_sub
-            result.append((current_time, sub_end, sub))
+            result.append((current_time, sub_end, sub, i))
             current_time = sub_end
             
         return result
@@ -414,48 +463,8 @@ Return ONLY the JSON array."""
         max_chars_per_line: int = 42,
         max_lines: int = 2
     ) -> str:
-        """
-        Tạo ngắt dòng thông minh cho phụ đề
-        
-        Args:
-            text: Văn bản cần ngắt
-            max_chars_per_line: Số ký tự tối đa mỗi dòng
-            max_lines: Số dòng tối đa
-            
-        Returns:
-            Văn bản đã được ngắt dòng
-        """
-        # Nếu text đủ ngắn, không cần ngắt
-        if len(text) <= max_chars_per_line:
-            return text
-        
-        words = text.split()
-        lines = []
-        current_line = []
-        current_length = 0
-        
-        for word in words:
-            word_len = len(word)
-            
-            if current_length + word_len + (1 if current_line else 0) <= max_chars_per_line:
-                current_line.append(word)
-                current_length += word_len + (1 if len(current_line) > 1 else 0)
-            else:
-                if current_line:
-                    lines.append(" ".join(current_line))
-                current_line = [word]
-                current_length = word_len
-                
-                if len(lines) >= max_lines - 1:
-                    # Gộp tất cả từ còn lại vào dòng cuối
-                    remaining_idx = words.index(word)
-                    lines.append(" ".join(words[remaining_idx:]))
-                    return "\n".join(lines)
-        
-        if current_line:
-            lines.append(" ".join(current_line))
-        
-        return "\n".join(lines[:max_lines])
+        """Tạo ngắt dòng thông minh (Dùng cho backward compatibility)"""
+        return smart_line_break(text, max_chars_per_line, max_lines)
     
     def segment_long_text(
         self,
@@ -611,6 +620,102 @@ Return ONLY the JSON array, no explanation."""
         
         return segments
 
+    def _get_merged_timeline(self, transcript: List[TranscriptSegment]) -> List[dict]:
+        """Gộp các đoạn voice gần nhau để tạo Slots"""
+        if not transcript:
+            return []
+            
+        merged = []
+        curr = {
+            "slot_id": 0,
+            "start": round(transcript[0].start, 2),
+            "end": round(transcript[0].end, 2),
+            "audio_content": transcript[0].text
+        }
+        
+        for i in range(1, len(transcript)):
+            next_seg = transcript[i]
+            if next_seg.start - curr["end"] < 0.4:
+                curr["end"] = round(next_seg.end, 2)
+                curr["audio_content"] += " " + next_seg.text
+            else:
+                merged.append(curr)
+                curr = {
+                    "slot_id": len(merged),
+                    "start": round(next_seg.start, 2),
+                    "end": round(next_seg.end, 2),
+                    "audio_content": next_seg.text
+                }
+        merged.append(curr)
+        return merged
+
+    def align_long_text_to_transcript(
+        self,
+        raw_text: str,
+        transcript: List[TranscriptSegment],
+        language: str = "vi"
+    ) -> List[Tuple[float, float, str]]:
+        """
+        Ngắt văn bản dài và khớp với nhịp điệu của transcript (audio).
+        Dùng AI để chia nhỏ văn bản và gán vào các Slots có sẵn.
+        """
+        if not transcript:
+            return self._distribute_evenly([raw_text], 0, 10.0, 2.0)
+
+        merged_timeline = self._get_merged_timeline(transcript)
+        client = self._get_openai_client()
+
+        prompt = f"""Break this FULL TEXT into segments to fit the {len(merged_timeline)} AUDIO VOICE SLOTS.
+    
+FULL TEXT:
+{raw_text}
+
+AUDIO VOICE SLOTS:
+{json.dumps(merged_timeline, ensure_ascii=False, indent=2)}
+
+TASK:
+1. Divide the FULL TEXT into exactly {len(merged_timeline)} pieces.
+2. Each piece MUST correspond to one slot_id in the timeline.
+3. Your output must be a JSON array where each object has "slot_id" and "text".
+   [ {{ "slot_id": 0, "text": "Part of text for first slot..." }}, ... ]
+4. Split the text naturally so the meaning flows logically across the slots.
+
+Return ONLY the JSON array."""
+
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a professional video editor specializing in rhythm-aware subtitling. Output ONLY valid JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.2
+            )
+            
+            result_text = response.choices[0].message.content.strip()
+            if result_text.startswith("```"):
+                result_text = result_text.split("```")[1]
+                if result_text.startswith("json"):
+                    result_text = result_text[4:]
+            
+            data = json.loads(result_text.strip())
+            aligned = []
+            for item in data:
+                try:
+                    slot_id = int(item["slot_id"])
+                    if 0 <= slot_id < len(merged_timeline):
+                        slot = merged_timeline[slot_id]
+                        aligned.append((slot["start"], slot["end"], item["text"].strip()))
+                except (ValueError, KeyError):
+                    continue
+            
+            return aligned
+        except Exception as e:
+            logger.error(f"Rhythm-aware alignment failed: {e}")
+            # Fallback: dùng logic cũ (chia đều hoặc map cơ bản)
+            segments = self.segment_long_text(raw_text, language=language)
+            return self.align_subtitles(segments, transcript)
+
 
 def extract_audio(video_path: str, output_path: Optional[str] = None) -> str:
     """
@@ -630,16 +735,22 @@ def extract_audio(video_path: str, output_path: Optional[str] = None) -> str:
         output_path = os.path.join(tempfile.gettempdir(), f"{video_name}_audio.wav")
     
     cmd = [
-        "ffmpeg", "-y",
+        "ffmpeg", "-y", "-nostdin",
         "-i", video_path,
         "-vn",  # No video
         "-acodec", "pcm_s16le",
         "-ar", "16000",  # 16kHz for Whisper
         "-ac", "1",  # Mono
+        "-af", "highpass=f=200,lowpass=f=3000", # Filter noise for better voice detection
         output_path
     ]
     
-    subprocess.run(cmd, capture_output=True, check=True)
+    subprocess.run(
+        cmd,
+        capture_output=True,
+        check=True,
+        stdin=subprocess.DEVNULL,
+    )
     logger.info(f"Extracted audio to {output_path}")
     
     return output_path

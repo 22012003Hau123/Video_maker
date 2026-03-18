@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional, Dict, List, Tuple
 from PIL import Image, ImageDraw, ImageFont
 
+from src.utils.text import wrap_text_by_pixel
 from .database import LegalContent, MediaType, UsageType, get_legal_database
 
 logger = logging.getLogger(__name__)
@@ -82,44 +83,20 @@ class ImageLegalOverlay:
         position: Optional[str] = None,
         font_size: Optional[int] = None,
         auto_detect_product: bool = False,
-        product_type: Optional[str] = None
+        product_type: Optional[str] = None,
+        sub_type: Optional[str] = "reels"
     ) -> str:
         """
-        Thêm nội dung pháp lý vào ảnh
-        
-        Args:
-            image_path: Đường dẫn ảnh input
-            country_code: Mã quốc gia (VN, FR, US, HK)
-            media_type: Loại media
-            usage_type: Hình thức sử dụng
-            output_path: Đường dẫn output (optional)
-            position: Vị trí đặt text (optional, override template)
-            font_size: Kích thước font (optional, override template)
-            auto_detect_product: Tự động phát hiện loại sản phẩm bằng CLIP
-            product_type: Loại sản phẩm (alcohol, tobacco, pharmaceutical, food)
-            
-        Returns:
-            Đường dẫn ảnh output
+        Thêm nội dung pháp lý vào ảnh với styling chính xác
         """
         image_path = Path(image_path)
-        
-        # Auto-detect product type using CLIP
-        detected_product = None
-        if auto_detect_product:
-            try:
-                from .product_detector import get_product_detector
-                detector = get_product_detector()
-                detected_product, confidence, label = detector.detect_product(str(image_path))
-                logger.info(f"CLIP detected: {detected_product} ({label}) - {confidence:.2%}")
-                product_type = detected_product if detected_product != "unknown" else product_type
-            except Exception as e:
-                logger.warning(f"CLIP detection failed: {e}")
         
         # Mở ảnh
         img = Image.open(image_path)
         img_width, img_height = img.size
+        ratio = img_width / img_height
         
-        # Convert to RGB if needed (for PNG with transparency)
+        # Convert to RGB if needed
         if img.mode in ('RGBA', 'P'):
             background = Image.new('RGB', img.size, (255, 255, 255))
             if img.mode == 'RGBA':
@@ -128,65 +105,126 @@ class ImageLegalOverlay:
                 background.paste(img)
             img = background
         
-        # Lấy nội dung pháp lý (với product_type nếu có)
-        legal = self.database.get_legal_content(
-            country_code, media_type, usage_type, video_duration=0, product_type=product_type
+        # Lấy danh sách nội dung pháp lý
+        legal_list = self.database.get_legal_content(
+            country_code, media_type, usage_type, video_duration=0, product_type=product_type, sub_type=sub_type
         )
         
-        if not legal:
-            logger.warning(f"No legal content found for {country_code}")
+        if not legal_list:
             return str(image_path)
         
-        # Output path
         if output_path is None:
             output_path = self.output_dir / f"{image_path.stem}_legal{image_path.suffix}"
         
-        # Setup drawing
+        # Build list of overlays to draw
         draw = ImageDraw.Draw(img)
         
-        # Font size - nhỏ cho ảnh (khoảng 1.5-2% chiều cao)
-        if font_size is None:
-            font_size = max(12, int(img_height * 0.018))
+        # We need to track the Y position if multiple are at the same location, but for images it's simpler
+        # Just loop through and draw
+        for legal in legal_list:
+            # Determine styling based on aspect ratio
+            # (Reset to base for each item unless position is specified)
+            cur_font_size_pt = 35
+            cur_bottom_offset = 30
+            cur_alignment = "center"
+            
+            if ratio < 0.6:  # 9x16
+                cur_font_size_pt = 42
+                if sub_type == "stories":
+                    cur_alignment = "left"
+                    cur_bottom_offset = 250
+                else: # reels
+                    cur_alignment = "center"
+                    cur_bottom_offset = 40
+            elif ratio < 1.1: # 1x1
+                cur_font_size_pt = 35
+                cur_bottom_offset = 30
+            else: # 16x9
+                cur_font_size_pt = 35
+                cur_bottom_offset = 30
+
+            # Determine font path
+            font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+            if getattr(legal, 'font_family', '').lower() == "oswald":
+                oswald_paths = ["/usr/share/fonts/truetype/oswald/Oswald-Bold.ttf", "/usr/share/fonts/truetype/google-fonts/Oswald-Bold.ttf", "data/fonts/Oswald-Bold.ttf"]
+                for p in oswald_paths:
+                    if Path(p).exists():
+                        font_path = p
+                        break
+            
+            # Scale
+            scale = img_height / 1080
+            fontsize = int(cur_font_size_pt * scale)
+            y_offset = int(cur_bottom_offset * scale)
+            x_margin = int(40 * scale)
+            
+            try:
+                font = ImageFont.truetype(font_path, fontsize)
+            except:
+                font = ImageFont.load_default()
+            
+            # Wrap text
+            max_width = img_width - (x_margin * 2)
+            wrapped_text = wrap_text_by_pixel(legal.text, font_path, fontsize, max_width)
+            
+            bbox = ImageDraw.Draw(Image.new('RGB', (1,1))).textbbox((0, 0), wrapped_text, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+            
+            x = (img_width - text_width) // 2 if cur_alignment == "center" else x_margin
+            y = img_height - text_height - y_offset
+
+            # Manual override or specific rule position
+            if position or (hasattr(legal, 'position') and legal.position != 'bottom'):
+                position_map = {
+                    "bottom_left": (x_margin, img_height - text_height - x_margin),
+                    "bottom_right": (img_width - text_width - x_margin, img_height - text_height - x_margin),
+                    "top_left": (x_margin, x_margin),
+                    "top_right": (img_width - text_width - x_margin, x_margin),
+                    "top": ((img_width - text_width) // 2, x_margin),
+                    "center": ((img_width - text_width) // 2, (img_height - text_height) // 2),
+                    "bottom": (x, y)
+                }
+                x, y = position_map.get(position or legal.position, (x, y))
+
+            # Draw shadow
+            shadow_offset = int(2 * scale)
+            shadow_draw = ImageDraw.Draw(img)
+            shadow_draw.text((x + shadow_offset, y + shadow_offset), wrapped_text, font=font, fill=(0, 0, 0, 200)) # 80% shadow
+
+            # Draw main
+            draw.text((x, y), wrapped_text, font=font, fill=(255, 255, 255))
+            
+            # Draw secondary
+            if getattr(legal, 'text_secondary', None):
+                wrapped_sec = wrap_text_by_pixel(legal.text_secondary, font_path, fontsize, max_width)
+                try:
+                    bbox_main = draw.textbbox((x, y), wrapped_text, font=font)
+                    y_sec = bbox_main[1] - (fontsize * wrapped_sec.count('\n') + fontsize) - 15
+                    draw.text((x, y_sec), wrapped_sec, font=font, fill=(255, 255, 255))
+                except:
+                    y_sec = y - fontsize - 15
+                    draw.text((x, y_sec), wrapped_sec, font=font, fill=(255, 255, 255))
         
-        font = self._get_font("Arial", font_size)
-        
-        # Lấy kích thước text
-        text = legal.text
-        bbox = draw.textbbox((0, 0), text, font=font)
-        text_width = bbox[2] - bbox[0]
-        text_height = bbox[3] - bbox[1]
-        
-        # Xác định vị trí
-        pos = position if position else getattr(legal, 'position', 'bottom_left')
-        x, y = self._calculate_position(
-            img_width, img_height, 
-            text_width, text_height, 
-            pos
-        )
-        
-        # Vẽ background semi-transparent (optional)
-        padding = 5
-        bg_box = [x - padding, y - padding, x + text_width + padding, y + text_height + padding]
-        
-        # Tạo overlay với độ trong suốt
-        overlay = Image.new('RGBA', img.size, (0, 0, 0, 0))
-        overlay_draw = ImageDraw.Draw(overlay)
-        overlay_draw.rectangle(bg_box, fill=(0, 0, 0, 128))  # 50% opacity black
-        
-        # Convert img to RGBA để blend
-        img_rgba = img.convert('RGBA')
-        img_rgba = Image.alpha_composite(img_rgba, overlay)
-        img = img_rgba.convert('RGB')
-        
-        # Vẽ lại text
-        draw = ImageDraw.Draw(img)
-        draw.text((x, y), text, font=font, fill=(255, 255, 255))
+        img.save(str(output_path), quality=95)
+        return str(output_path)
         
         # Lưu ảnh
-        img.save(str(output_path), quality=95)
-        logger.info(f"Legal overlay added to image: {output_path}")
+            logger.info(f"Legal overlay added to image: {output_path}")
         
         return str(output_path)
+
+    def _wrap_text_legacy(self, text: str, font_path: str, fontsize: int, max_width: int) -> str:
+        """Tự động ngắt dòng văn bản (Dùng cho backward compatibility)"""
+        return wrap_text_by_pixel(text, font_path, fontsize, max_width)
+
+    def _get_text_width_legacy(self, text: str, font) -> int:
+        """Tính chiều rộng của văn bản (Legacy)"""
+        try:
+            bbox = font.getbbox(text)
+            return bbox[2] - bbox[0]
+        except AttributeError:
+            return font.getsize(text)[0]
     
     def batch_add_legal(
         self,

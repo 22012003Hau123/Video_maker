@@ -1,0 +1,42 @@
+{
+  "country_code": "DE",
+  "country_name": "Germany",
+  "language": "de",
+  "default_font": "Oswald",
+  "rules": [
+    {
+      "type": "alcohol",
+      "platform": "social",
+      "usage_type": "shareable",
+      "media_types": ["video"],
+      "duration_rules": {
+        "under_30s": {
+          "text": "Bitte maßvoll genießen",
+          "secondary_text": "Maßvoll genießen. Bitte teile unsere Inhalte nur mit Personen über 18 Jahren.",
+          "timing": "first_5s",
+          "position": "bottom",
+          "min_display_duration": 5.0
+        },
+        "over_30s": {
+          "text": "Maßvoll genießen. Bitte teile unsere Inhalte nur mit Personen über 18 Jahren.",
+          "secondary_text": "Maßvoll genießen. Bitte teile unsere Inhalte nur mit Personen über 18 Jahren.",
+          "timing": "first_5s",
+          "position": "bottom",
+          "min_display_duration": 5.0
+        },
+        "stories": {
+          "text": "Bitte maßvoll genießen.\nBitte teile unsere Inhalte nur mit Personen über 18 Jahren.",
+          "secondary_text": "Maßvoll genießen. Bitte teile unsere Inhalte nur mit Personen über 18 Jahren.",
+          "timing": "first_5s",
+          "position": "bottom",
+          "min_display_duration": 5.0
+        }
+      },
+      "style": {
+        "font": "Oswald",
+        "font_size": 14,
+        "font_color": "#FFFFFF"
+      }
+    }
+  ]
+}

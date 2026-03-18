@@ -65,7 +65,7 @@ class SmartCutter:
 
         joined = ffmpeg.concat(*streams, v=1, a=1).node
 
-        out = ffmpeg.output(joined[0], joined[1], output_path, preset='ultrafast', crf=23)
+        out = ffmpeg.output(joined[0], joined[1], output_path, preset='ultrafast', crf=23, acodec='aac')
         
         try:
             out.run(overwrite_output=True)

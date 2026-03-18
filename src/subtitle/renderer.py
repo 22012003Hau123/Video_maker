@@ -11,7 +11,8 @@ from dataclasses import dataclass
 import tempfile
 
 from .font_manager import get_font_manager, FontConfig
-from .excel_reader import SubtitleEntry
+from src.utils.video import get_video_info, detect_video_format
+from src.utils.text import generate_srt_content
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +35,10 @@ class VideoFormat:
 
 # Các định dạng video được hỗ trợ
 VIDEO_FORMATS = {
-    "16x9": VideoFormat("16x9", 1920, 1080, "16:9", subtitle_margin_bottom=50),
+    "16x9": VideoFormat("16x9", 1920, 1080, "16:9", subtitle_margin_bottom=30),
+    "1x1": VideoFormat("1x1", 1080, 1080, "1:1", subtitle_margin_bottom=30),
+    "4x5": VideoFormat("4x5", 1080, 1350, "4:5", subtitle_margin_bottom=38), # 37.5 -> 38
     "9x16": VideoFormat("9x16", 1080, 1920, "9:16", subtitle_margin_bottom=100),
-    "1x1": VideoFormat("1x1", 1080, 1080, "1:1", subtitle_margin_bottom=60),
-    "4x5": VideoFormat("4x5", 1080, 1350, "4:5", subtitle_margin_bottom=80),
 }
 
 
@@ -90,21 +91,15 @@ class SubtitleRenderer:
     ) -> str:
         """
         Tạo file ASS (Advanced SubStation Alpha) với styling
-        
-        Args:
-            subtitles: List of (start_time, end_time, text)
-            output_path: Đường dẫn file ASS
-            font_config: Cấu hình font
-            video_format: Định dạng video
-            
-        Returns:
-            Đường dẫn file ASS
         """
         def format_time_ass(seconds: float) -> str:
             hours = int(seconds // 3600)
             minutes = int((seconds % 3600) // 60)
             secs = seconds % 60
             return f"{hours}:{minutes:02d}:{secs:05.2f}"
+            
+        # Get advanced options from font manager
+        opts = self.font_manager.get_ffmpeg_font_options(font_config.language, video_format.name)
         
         # ASS header với style
         ass_content = f"""[Script Info]
@@ -114,8 +109,8 @@ PlayResX: {video_format.width}
 PlayResY: {video_format.height}
 
 [V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{font_config.font_family},{font_config.font_size},&H00FFFFFF,&H000000FF,&H00000000,&H80000000,{1 if font_config.bold else 0},{1 if font_config.italic else 0},0,0,100,100,0,0,1,{font_config.outline_width},1,2,10,10,{video_format.subtitle_margin_bottom},1
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Blur, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,{opts['fontname']},{opts['fontsize']},&H00FFFFFF,&H000000FF,&H00000000,{opts['backcolor']},{opts['bold']},{opts['italic']},0,0,{opts['scalex']},{opts['scaley']},0,0,1,{opts['outline']},{opts['shadow']},{opts['blur']},2,10,10,{video_format.subtitle_margin_bottom},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -140,7 +135,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             video_path
         ]
         
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+        )
         if result.returncode != 0:
             raise RuntimeError(f"ffprobe failed: {result.stderr}")
         
@@ -185,7 +185,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         output_path: Optional[str] = None,
         language: str = "vi",
         video_format: Optional[str] = None,
-        use_ass: bool = True
+        use_ass: bool = True,
+        export_format: str = "mp4_standard"
     ) -> str:
         """
         Render phụ đề lên video
@@ -210,8 +211,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         font_config = self.font_manager.get_font_config(language)
         
         # Output path
+        suffix = ".mov" if export_format == "prores" else video_path.suffix
         if output_path is None:
-            output_path = self.output_dir / f"{video_path.stem}_subtitled{video_path.suffix}"
+            output_path = self.output_dir / f"{video_path.stem}_subtitled{suffix}"
         
         # Tạo file phụ đề tạm trong output_dir (cùng ổ đĩa với project)
         # để tránh vấn đề drive letter (C: vs D:) khi dùng relative path cho FFmpeg
@@ -250,21 +252,33 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 style += f",BorderStyle=1,Outline={font_opts['borderw']}"
                 subtitle_filter = f"subtitles={ffmpeg_sub_path}:force_style='{style}'"
             
+            # Video encoding settings based on export_format
+            v_codec = ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "23"]
+            if export_format == "prores":
+                # ProRes 422: -c:v prores_ks -profile:v 3
+                v_codec = ["-c:v", "prores_ks", "-profile:v", "3", "-vendor", "apl0", "-bits_per_mb", "8000"]
+            elif export_format == "mp4_20mbps":
+                # CBR 20Mbps: -b:v 20M -maxrate 20M -bufsize 40M
+                v_codec = ["-c:v", "libx264", "-preset", "medium", "-b:v", "20M", "-maxrate", "20M", "-bufsize", "40M"]
+            
             cmd = [
-                "ffmpeg", "-y",
+                "ffmpeg", "-y", "-nostdin",
                 "-i", str(video_path),
                 "-vf", subtitle_filter,
-                "-c:v", "libx264",
-                "-preset", "ultrafast",  # Optimize for speed
-                "-crf", "23",            # Maintain good quality
+                *v_codec,
                 "-threads", "0",         # Use all available cores
-                "-c:a", "copy",
+                "-c:a", "aac",
                 "-movflags", "+faststart", # Optimize for web playback
                 str(output_path)
             ]
             
             logger.info(f"Running FFmpeg: {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                stdin=subprocess.DEVNULL,
+            )
             
             if result.returncode != 0:
                 logger.error(f"FFmpeg error: {result.stderr}")
