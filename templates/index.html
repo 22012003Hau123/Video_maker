@@ -656,7 +656,7 @@
                     <div class="form-group">
                         <label>Preview</label>
                         <div id="video-preview" style="background: var(--surface-light); border-radius: 12px; min-height: 180px; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;">
-                            <video id="preview-player" style="width: 100%; height: 180px; object-fit: contain; display: none;"></video>
+                            <video id="preview-player" controls playsinline preload="metadata" style="width: 100%; height: 180px; object-fit: contain; display: none;"></video>
                             <img id="preview-img" style="width: 100%; height: 180px; object-fit: contain; display: none;">
                             <span id="preview-placeholder" style="color: var(--text-muted);"><i class="ph ph-film-strip"></i> Preview will appear here</span>
                         </div>
@@ -2182,6 +2182,134 @@
                 document.getElementById('btn-packshot').disabled = false;
             }
         }
+
+        function _normalizeCandidatePath(rawPath) {
+            if (!rawPath) return '';
+            const normalized = String(rawPath).replace(/\\/g, '/').trim();
+            const cleaned = normalized.split('#')[0].split('?')[0];
+            if (!cleaned) return '';
+
+            // If backend ever returns an absolute URL (e.g. http://app/outputs/...)
+            // or protocol-relative URL (//app/outputs/...), strip origin and keep the path.
+            // This prevents browser trying to resolve Docker-internal hostnames like "app".
+            try {
+                const maybeUrl = cleaned.startsWith('//') ? ('http:' + cleaned) : cleaned;
+                if (/^https?:\/\//i.test(maybeUrl)) {
+                    const u = new URL(maybeUrl);
+                    return u.pathname || '';
+                }
+            } catch (_) {
+                // ignore
+            }
+
+            return cleaned;
+        }
+
+        function buildPreviewVideoUrl(rawPath) {
+            if (!rawPath) return '';
+            const cleaned = _normalizeCandidatePath(rawPath);
+            const lowered = cleaned.toLowerCase();
+            let relativePath = '';
+
+            if (!cleaned) return '';
+
+            if (lowered.startsWith('/api/video-preview/')) {
+                return cleaned;
+            }
+            if (lowered.startsWith('/api/video/')) {
+                return cleaned;
+            }
+            if (lowered.startsWith('api/video-preview/')) {
+                return `/${cleaned}`;
+            }
+            if (lowered.startsWith('api/video/')) {
+                return `/${cleaned}`;
+            }
+            // At this point cleaned is either a path or a URL-safe path; never return cross-origin URLs.
+
+            if (lowered.startsWith('/outputs/')) {
+                relativePath = cleaned.slice('/outputs/'.length);
+            } else if (lowered.startsWith('outputs/')) {
+                relativePath = cleaned.slice('outputs/'.length);
+            } else {
+                const marker = '/outputs/';
+                const markerIndex = lowered.lastIndexOf(marker);
+                if (markerIndex !== -1) {
+                    relativePath = cleaned.slice(markerIndex + marker.length);
+                } else {
+                    const isAbsolutePath = cleaned.startsWith('/') || /^[a-zA-Z]:\//.test(cleaned);
+                    if (isAbsolutePath) return '';
+
+                    // Relative fallback for unexpected values.
+                    relativePath = cleaned.replace(/^\/+/, '');
+                }
+            }
+
+            relativePath = relativePath.replace(/^\/+/, '');
+            if (!relativePath) return '';
+
+            // Prefer browser-compatible preview stream (H.264/AAC) when available.
+            return `/api/video-preview/${encodeURI(relativePath).replace(/%2F/g, '/')}`;
+        }
+
+        function extractOutputRelativePath(rawPath) {
+            if (!rawPath) return '';
+            const cleaned = _normalizeCandidatePath(rawPath);
+            const lowered = cleaned.toLowerCase();
+            if (!cleaned) return '';
+
+            if (lowered.startsWith('/api/video/')) return cleaned.slice('/api/video/'.length).replace(/^\/+/, '');
+            if (lowered.startsWith('api/video/')) return cleaned.slice('api/video/'.length).replace(/^\/+/, '');
+            if (lowered.startsWith('/api/outputs/')) return cleaned.slice('/api/outputs/'.length).replace(/^\/+/, '');
+            if (lowered.startsWith('api/outputs/')) return cleaned.slice('api/outputs/'.length).replace(/^\/+/, '');
+            if (lowered.startsWith('/outputs/')) return cleaned.slice('/outputs/'.length).replace(/^\/+/, '');
+            if (lowered.startsWith('outputs/')) return cleaned.slice('outputs/'.length).replace(/^\/+/, '');
+
+            const marker = '/outputs/';
+            const markerIndex = lowered.lastIndexOf(marker);
+            if (markerIndex !== -1) {
+                return cleaned.slice(markerIndex + marker.length).replace(/^\/+/, '');
+            }
+            return '';
+        }
+
+        function buildPreviewVideoCandidates(rawPath, downloadUrl) {
+            const candidates = [];
+            const pushUnique = (url) => {
+                if (!url) return;
+                if (!candidates.includes(url)) candidates.push(url);
+            };
+
+            const apiPreviewUrl = buildPreviewVideoUrl(rawPath);
+            const relativePath = extractOutputRelativePath(rawPath);
+            // 1) Preview stream (transcoded if needed) with Range support
+            pushUnique(apiPreviewUrl);
+            // 2) Direct stream (Range support) as secondary
+            if (relativePath) {
+                pushUnique(`/api/video/${encodeURI(relativePath).replace(/%2F/g, '/')}`);
+            }
+            // 3) Static outputs (may not support seeking reliably depending on server)
+            if (relativePath) {
+                pushUnique(`/api/outputs/${encodeURI(relativePath).replace(/%2F/g, '/')}`);
+            }
+            // 4) Download fallback (often lacks Range; backend should handle as best-effort)
+            pushUnique(downloadUrl);
+
+            return candidates;
+        }
+
+        function handleVideoPreviewError(videoEl) {
+            if (!videoEl) return;
+            const fallbackRaw = videoEl.dataset.fallbacks || '';
+            if (!fallbackRaw) return;
+            const fallbacks = fallbackRaw.split('|').filter(Boolean);
+            if (!fallbacks.length) return;
+
+            const nextUrl = fallbacks.shift();
+            videoEl.dataset.fallbacks = fallbacks.join('|');
+            videoEl.src = nextUrl;
+            videoEl.load();
+        }
         
         async function pollJobStatus(jobId, statusBoxId) {
             const statusBox = document.getElementById(statusBoxId);
@@ -2216,8 +2344,9 @@
                         if (isVideo && !hasMultipleResults) {
                             const isProRes = resultPath.endsWith('.mov') || resultPath.endsWith('.qt');
                             const mainLabel = (job.result_files && job.result_files[0]) ? job.result_files[0].label : 'Result Video';
-                            // Convert outputs/path/to/file.mp4 to /api/video/path/to/file.mp4
-                            const videoUrl = "/" + job.result_path.replace(/^outputs\//, "api/video/");
+                            const videoCandidates = buildPreviewVideoCandidates(job.result_path, downloadUrl);
+                            const videoUrl = videoCandidates[0] || downloadUrl;
+                            const videoFallbacks = videoCandidates.slice(1).join('|');
                             
                             html += `
                                 <div style="margin-top: 1.5rem; background: var(--surface-light); border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color);">
@@ -2235,7 +2364,7 @@
                                             </div>
                                         </div>
                                     ` : `
-                                        <video controls preload="auto" playsinline src="${videoUrl}" style="width: 100%; max-height: 400px; background: #000; display: block;"></video>
+                                        <video controls preload="auto" playsinline src="${videoUrl}" data-fallbacks="${videoFallbacks}" onerror="handleVideoPreviewError(this)" style="width: 100%; max-height: 400px; background: #000; display: block;"></video>
                                     `}
                                     
                                     <div style="padding: 1rem; display: flex; align-items: center; gap: 1rem;">
@@ -2251,6 +2380,9 @@
                             html += '<div style="margin-top: 1rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">';
                             job.result_files.forEach((file, index) => {
                                 const fileUrl = `/api/download/${jobId}/${index}`;
+                                const previewFileCandidates = buildPreviewVideoCandidates(file.path, fileUrl);
+                                const previewFileUrl = previewFileCandidates[0] || fileUrl;
+                                const previewFileFallbacks = previewFileCandidates.slice(1).join('|');
                                 const filePath = (file.path || "").toLowerCase();
                                 const isProResFile = filePath.endsWith('.mov') || filePath.endsWith('.qt');
                                 
@@ -2263,7 +2395,7 @@
                                                 <div style="font-size: 0.65rem; color: var(--text-muted);">Preview Not Supported</div>
                                             </div>
                                         ` : `
-                                            <video controls preload="auto" playsinline src="/${file.path.replace(/^outputs\//, 'api/video/')}" style="width: 100%; height: 160px; object-fit: cover; background: #000;"></video>
+                                            <video controls preload="auto" playsinline src="${previewFileUrl}" data-fallbacks="${previewFileFallbacks}" onerror="handleVideoPreviewError(this)" style="width: 100%; height: 160px; object-fit: cover; background: #000;"></video>
                                         `) : `
                                             <div style="height: 160px; display: flex; align-items: center; justify-content: center; background: rgba(59, 130, 246, 0.05); color: var(--primary);">
                                                 <i class="ph ph-file-text" style="font-size: 2.5rem;"></i>

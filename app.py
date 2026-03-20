@@ -5,6 +5,8 @@ import os
 import logging
 import shutil
 import uuid
+import hashlib
+import subprocess
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from datetime import datetime
@@ -35,6 +37,7 @@ logger = logging.getLogger(__name__)
 # Create directories
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "./uploads"))
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "./outputs"))
+PREVIEW_CACHE_DIR = OUTPUT_DIR / ".preview_cache"
 try:
     CLEANUP_MAX_AGE_HOURS = int(os.getenv("CLEANUP_MAX_AGE_HOURS", "24"))
 except ValueError:
@@ -45,6 +48,7 @@ except ValueError:
     CLEANUP_INTERVAL_HOURS = 24
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+PREVIEW_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Default Whisper Prompt for better brand recognition
 # (Helps avoid mis-transcriptions like "Remember to attend" for "Belvedere 10")
@@ -1826,35 +1830,38 @@ async def get_job_status(job_id: str):
     return job
 
 
-@app.api_route("/api/video/{video_path:path}", methods=["GET", "HEAD"])
-async def stream_video(video_path: str, request: Request):
-    """
-    Custom video streaming route that supports Range requests (Seeking/Tua).
-    This is the most robust way to ensure seeking works in all browsers.
-    """
-    full_path = OUTPUT_DIR / video_path
-    if not full_path.exists():
+def _resolve_output_video_path(video_path: str) -> Path:
+    """Resolve output video path and prevent path traversal."""
+    output_root = OUTPUT_DIR.resolve()
+    full_path = (OUTPUT_DIR / video_path).resolve()
+    if output_root not in full_path.parents and full_path != output_root:
+        raise HTTPException(status_code=403, detail="Invalid video path")
+    return full_path
+
+
+def _stream_video_file(full_path: Path, request: Request) -> StreamingResponse:
+    if not full_path.exists() or not full_path.is_file():
         raise HTTPException(status_code=404, detail="Video not found")
-        
+
     file_size = full_path.stat().st_size
     range_header = request.headers.get("range")
-    
+
     ext = full_path.suffix.lower()
     media_types = {
         ".mp4": "video/mp4",
         ".mov": "video/quicktime",
         ".qt": "video/quicktime",
         ".webm": "video/webm",
-        ".mkv": "video/x-matroska"
+        ".mkv": "video/x-matroska",
     }
     content_type = media_types.get(ext, "video/mp4")
-    
+
     headers = {
         "Accept-Ranges": "bytes",
         "Content-Type": content_type,
         "Cache-Control": "no-cache",
     }
-    
+
     if range_header:
         # Range format: "bytes=start-end"
         try:
@@ -1863,12 +1870,12 @@ async def stream_video(video_path: str, request: Request):
             end = int(end) if end else file_size - 1
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid range format")
-            
+
         if start >= file_size:
             raise HTTPException(status_code=416, detail="Requested range not satisfiable")
-            
+
         chunk_size = (end - start) + 1
-        
+
         def iter_file():
             with open(full_path, "rb") as f:
                 f.seek(start)
@@ -1879,27 +1886,92 @@ async def stream_video(video_path: str, request: Request):
                         break
                     yield chunk
                     remaining -= len(chunk)
-                    
+
         headers.update({
             "Content-Range": f"bytes {start}-{end}/{file_size}",
             "Content-Length": str(chunk_size),
         })
-        
+
         return StreamingResponse(iter_file(), status_code=206, headers=headers)
-        
+
     # Normal full-file response
     headers["Content-Length"] = str(file_size)
-    
+
     def iter_full_file():
         with open(full_path, "rb") as f:
             while chunk := f.read(1024 * 1024):
                 yield chunk
-                
+
     return StreamingResponse(iter_full_file(), headers=headers)
 
 
+def _get_preview_cache_path(source_path: Path) -> Path:
+    """Create deterministic cache filename from source file path + metadata."""
+    stat = source_path.stat()
+    fingerprint = f"{source_path}:{int(stat.st_mtime)}:{stat.st_size}"
+    cache_name = hashlib.sha1(fingerprint.encode("utf-8")).hexdigest() + ".mp4"
+    return PREVIEW_CACHE_DIR / cache_name
+
+
+def _ensure_web_preview(source_path: Path) -> Path:
+    """Transcode source video to web-compatible MP4 if cache does not exist."""
+    preview_path = _get_preview_cache_path(source_path)
+    if preview_path.exists() and preview_path.stat().st_size > 0:
+        return preview_path
+
+    PREVIEW_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        "ffmpeg", "-y", "-nostdin",
+        "-i", str(source_path),
+        "-map", "0:v:0",
+        "-map", "0:a:0?",
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        "-crf", "23",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        "-c:a", "aac",
+        "-b:a", "128k",
+        str(preview_path),
+    ]
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except Exception as exc:
+        logger.error(f"Preview transcode failed for {source_path}: {exc}")
+        if preview_path.exists():
+            preview_path.unlink(missing_ok=True)
+        raise
+
+    return preview_path
+
+
+@app.api_route("/api/video/{video_path:path}", methods=["GET", "HEAD"])
+async def stream_video(video_path: str, request: Request):
+    """
+    Custom video streaming route that supports Range requests (Seeking/Tua).
+    This is the most robust way to ensure seeking works in all browsers.
+    """
+    full_path = _resolve_output_video_path(video_path)
+    return _stream_video_file(full_path, request)
+
+
+@app.api_route("/api/video-preview/{video_path:path}", methods=["GET", "HEAD"])
+async def stream_video_preview(video_path: str, request: Request):
+    """
+    Stream a browser-compatible preview (H.264/AAC) generated on demand and cached.
+    Falls back to original file if transcoding fails.
+    """
+    source_path = _resolve_output_video_path(video_path)
+    try:
+        preview_path = _ensure_web_preview(source_path)
+        return _stream_video_file(preview_path, request)
+    except Exception:
+        logger.warning(f"Using original stream as fallback for {source_path}")
+        return _stream_video_file(source_path, request)
+
+
 @app.get("/api/download/{job_id}")
-async def download_result(job_id: str):
+async def download_result(job_id: str, request: Request):
     """Download kết quả xử lý (file đầu tiên)"""
     job = get_job(job_id)
     if not job:
@@ -1935,6 +2007,13 @@ async def download_result(job_id: str):
         ".srt": "text/plain", 
         ".zip": "application/zip"
     }
+
+    # If a browser tries to preview via the download endpoint, support Range requests
+    # so HTML5 <video> can seek and load reliably.
+    if ext in {".mp4", ".mov", ".qt", ".webm", ".mkv"}:
+        range_header = request.headers.get("range")
+        if range_header:
+            return _stream_video_file(result_path, request)
     
     return FileResponse(
         str(result_path),
