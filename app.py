@@ -7,6 +7,7 @@ import shutil
 import uuid
 import hashlib
 import subprocess
+import json
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from datetime import datetime
@@ -353,6 +354,137 @@ def deserialize_scenes(scenes_data: List[Dict[str, Any]]):
     return scenes
 
 
+def _create_ae_package_dirs(job_id: str) -> Dict[str, Path]:
+    root = OUTPUT_DIR / "ae_packages" / f"ae_package_{job_id}"
+    paths = {
+        "root": root,
+        "video": root / "video",
+        "audio": root / "audio",
+        "subtitles": root / "subtitles",
+        "timeline": root / "timeline",
+    }
+    for path in paths.values():
+        path.mkdir(parents=True, exist_ok=True)
+    return paths
+
+
+def _probe_video_metadata(video_path: str) -> Dict[str, Any]:
+    cmd = [
+        "ffprobe",
+        "-v", "quiet",
+        "-print_format", "json",
+        "-show_streams",
+        "-show_format",
+        video_path,
+    ]
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+            stdin=subprocess.DEVNULL,
+        )
+        info = json.loads(result.stdout or "{}")
+    except Exception:
+        return {}
+
+    video_stream = None
+    for stream in info.get("streams", []):
+        if stream.get("codec_type") == "video":
+            video_stream = stream
+            break
+
+    fps = None
+    if video_stream:
+        frame_rate = video_stream.get("r_frame_rate") or video_stream.get("avg_frame_rate")
+        if isinstance(frame_rate, str) and "/" in frame_rate:
+            n, d = frame_rate.split("/", 1)
+            try:
+                n_val = float(n)
+                d_val = float(d)
+                if d_val != 0:
+                    fps = round(n_val / d_val, 3)
+            except Exception:
+                fps = None
+
+    duration = None
+    try:
+        duration = float((info.get("format") or {}).get("duration"))
+    except Exception:
+        duration = None
+
+    return {
+        "fps": fps,
+        "duration": duration,
+        "width": (video_stream or {}).get("width"),
+        "height": (video_stream or {}).get("height"),
+    }
+
+
+def _export_wav_for_ae(video_path: str, output_path: Path) -> str:
+    cmd = [
+        "ffmpeg", "-y", "-nostdin",
+        "-i", video_path,
+        "-vn",
+        "-acodec", "pcm_s16le",
+        "-ar", "48000",
+        "-ac", "2",
+        str(output_path),
+    ]
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"WAV export failed: {result.stderr}")
+    return str(output_path)
+
+
+def _write_timeline_json_for_ae(
+    output_path: Path,
+    aligned: List[tuple],
+    language: str,
+    source_language: str,
+    video_path: str,
+    metadata: Dict[str, Any],
+) -> str:
+    segments = []
+    for idx, (start, end, text) in enumerate(aligned, start=1):
+        start_val = float(start)
+        end_val = float(end)
+        segments.append({
+            "index": idx,
+            "start": round(start_val, 3),
+            "end": round(end_val, 3),
+            "duration": round(max(0.0, end_val - start_val), 3),
+            "text": text,
+        })
+
+    payload = {
+        "schema": "ae_timeline_v1",
+        "language": language,
+        "source_language": source_language,
+        "video": {
+            "path": str(video_path),
+            "fps": metadata.get("fps"),
+            "duration": metadata.get("duration"),
+            "width": metadata.get("width"),
+            "height": metadata.get("height"),
+        },
+        "segments": segments,
+    }
+    output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return str(output_path)
+
+
+def _zip_ae_package(root_dir: Path) -> str:
+    zip_path = shutil.make_archive(str(root_dir), "zip", root_dir=str(root_dir.parent), base_dir=root_dir.name)
+    return str(zip_path)
+
+
 async def process_subtitles(
     job_id: str,
     video_path: str,
@@ -372,6 +504,13 @@ async def process_subtitles(
         
         sync = TimingSync()
         result_files = []
+        ae_package_mode = export_format == "ae_package"
+        render_export_format = "prores" if ae_package_mode else export_format
+        if ae_package_mode:
+            export_video = True
+            export_srt = True
+        ae_paths = _create_ae_package_dirs(job_id) if ae_package_mode else {}
+        video_meta = _probe_video_metadata(video_path) if ae_package_mode else {}
         
         # 1. Trích xuất audio
         update_job(job_id, progress=10, message="Extracting audio from video...")
@@ -389,6 +528,17 @@ async def process_subtitles(
             (seg.start, seg.end, sync.smart_line_break(seg.text))
             for seg in transcript
         ]
+
+        if ae_package_mode:
+            update_job(job_id, progress=25, message="Preparing AE package audio (WAV)...")
+            wav_output = ae_paths["audio"] / f"{Path(video_path).stem}_master.wav"
+            wav_path = _export_wav_for_ae(video_path, wav_output)
+            result_files.append(ResultFile(
+                path=wav_path,
+                language="multi",
+                type="audio",
+                label="AE Package - Master WAV"
+            ))
         
         update_job(job_id, progress=30)
         
@@ -415,9 +565,13 @@ async def process_subtitles(
             if export_video:
                 try:
                     # Chọn đuôi file phù hợp (ProRes cần .mov)
-                    ext = ".mov" if export_format == "prores" else ".mp4"
+                    ext = ".mov" if render_export_format == "prores" else ".mp4"
                     output_filename = f"{Path(video_path).stem}_{lang}{ext}"
-                    output_path = str(OUTPUT_DIR / output_filename)
+                    output_path = (
+                        str(ae_paths["video"] / output_filename)
+                        if ae_package_mode else
+                        str(OUTPUT_DIR / output_filename)
+                    )
                     
                     output_path = renderer.render(
                         video_path,
@@ -425,20 +579,24 @@ async def process_subtitles(
                         output_path,
                         language=lang,
                         video_format=video_format,
-                        export_format=export_format
+                        export_format=render_export_format
                     )
                     result_files.append(ResultFile(
                         path=output_path,
                         language=lang,
                         type="video",
-                        label=f"{lang_name} - Video"
+                        label=f"{lang_name} - {'ProRes Video' if ae_package_mode else 'Video'}"
                     ))
                 except Exception as e:
                     logger.warning(f"Render {lang} video failed: {e}")
             
             # Export SRT
             if export_srt:
-                srt_path = str(OUTPUT_DIR / f"subtitle_{job_id}_{lang}.srt")
+                srt_path = (
+                    str(ae_paths["subtitles"] / f"{Path(video_path).stem}_{lang}.srt")
+                    if ae_package_mode else
+                    str(OUTPUT_DIR / f"subtitle_{job_id}_{lang}.srt")
+                )
                 generate_srt(aligned, srt_path)
                 result_files.append(ResultFile(
                     path=srt_path,
@@ -446,15 +604,42 @@ async def process_subtitles(
                     type="srt",
                     label=f"{lang_name} - SRT"
                 ))
+
+            if ae_package_mode:
+                timeline_path = _write_timeline_json_for_ae(
+                    ae_paths["timeline"] / f"{Path(video_path).stem}_{lang}.json",
+                    aligned,
+                    language=lang,
+                    source_language=source_lang,
+                    video_path=video_path,
+                    metadata=video_meta,
+                )
+                result_files.append(ResultFile(
+                    path=timeline_path,
+                    language=lang,
+                    type="timeline",
+                    label=f"{lang_name} - Timeline JSON"
+                ))
         
         if not result_files:
             raise ValueError("Không tạo được output nào")
+
+        primary_result_path = result_files[0].path
+        if ae_package_mode:
+            package_zip = _zip_ae_package(ae_paths["root"])
+            result_files.insert(0, ResultFile(
+                path=package_zip,
+                language="multi",
+                type="zip",
+                label="AE Package - ZIP"
+            ))
+            primary_result_path = package_zip
         
         update_job(
             job_id,
             status="completed",
             progress=100,
-            result_path=result_files[0].path,
+            result_path=primary_result_path,
             result_files=result_files,
             completed_at=datetime.now().isoformat()
         )
@@ -1038,6 +1223,13 @@ async def process_subtitles_from_text(
         
         sync = TimingSync()
         result_files = []
+        ae_package_mode = export_format == "ae_package"
+        render_export_format = "prores" if ae_package_mode else export_format
+        if ae_package_mode:
+            export_video = True
+            export_srt = True
+        ae_paths = _create_ae_package_dirs(job_id) if ae_package_mode else {}
+        video_meta = _probe_video_metadata(video_path) if ae_package_mode else {}
         
         # Nếu có raw_text (1 đoạn dài) và không yêu cầu ngắt theo nhịp điệu (hoặc fallback)
         if raw_text and not subtitle_lines and not auto_segment_rhythm:
@@ -1089,6 +1281,17 @@ async def process_subtitles_from_text(
                 (i * 3, (i + 1) * 3, text, i)
                 for i, text in enumerate(subtitle_lines)
             ]
+
+        if ae_package_mode:
+            update_job(job_id, progress=62, message="Preparing AE package audio (WAV)...")
+            wav_output = ae_paths["audio"] / f"{Path(video_path).stem}_master.wav"
+            wav_path = _export_wav_for_ae(video_path, wav_output)
+            result_files.append(ResultFile(
+                path=wav_path,
+                language="multi",
+                type="audio",
+                label="AE Package - Master WAV"
+            ))
         
         update_job(job_id, progress=70, message="Starting output export...")
         
@@ -1133,9 +1336,13 @@ async def process_subtitles_from_text(
                     logger.info(f"Rendering video for {lang}...")
                     
                     # Chọn đuôi file phù hợp (ProRes cần .mov)
-                    ext = ".mov" if export_format == "prores" else ".mp4"
+                    ext = ".mov" if render_export_format == "prores" else ".mp4"
                     output_filename = f"{Path(video_path).stem}_{lang}{ext}"
-                    output_path = str(OUTPUT_DIR / output_filename)
+                    output_path = (
+                        str(ae_paths["video"] / output_filename)
+                        if ae_package_mode else
+                        str(OUTPUT_DIR / output_filename)
+                    )
                     
                     output_path = renderer.render(
                         video_path,
@@ -1143,13 +1350,13 @@ async def process_subtitles_from_text(
                         output_path,
                         language=lang,
                         video_format=video_format,
-                        export_format=export_format
+                        export_format=render_export_format
                     )
                     result_files.append(ResultFile(
                         path=output_path,
                         language=lang,
                         type="video",
-                        label=f"{lang_name} - Video"
+                        label=f"{lang_name} - {'ProRes Video' if ae_package_mode else 'Video'}"
                     ))
                     logger.info(f"Rendered video for {lang} saved to {output_path}")
                 except Exception as e:
@@ -1158,7 +1365,11 @@ async def process_subtitles_from_text(
             # Export SRT
             if export_srt:
                 try:
-                    srt_path = str(OUTPUT_DIR / f"subtitle_{job_id}_{lang}.srt")
+                    srt_path = (
+                        str(ae_paths["subtitles"] / f"{Path(video_path).stem}_{lang}.srt")
+                        if ae_package_mode else
+                        str(OUTPUT_DIR / f"subtitle_{job_id}_{lang}.srt")
+                    )
                     generate_srt(aligned, srt_path)
                     result_files.append(ResultFile(
                         path=srt_path,
@@ -1169,15 +1380,42 @@ async def process_subtitles_from_text(
                     logger.info(f"Generated SRT for {lang} saved to {srt_path}")
                 except Exception as e:
                     logger.warning(f"Generate {lang} SRT failed: {e}")
+
+            if ae_package_mode:
+                timeline_path = _write_timeline_json_for_ae(
+                    ae_paths["timeline"] / f"{Path(video_path).stem}_{lang}.json",
+                    aligned,
+                    language=lang,
+                    source_language=source_lang,
+                    video_path=video_path,
+                    metadata=video_meta,
+                )
+                result_files.append(ResultFile(
+                    path=timeline_path,
+                    language=lang,
+                    type="timeline",
+                    label=f"{lang_name} - Timeline JSON"
+                ))
         
         if not result_files:
             raise ValueError("Không tạo được output nào")
+
+        primary_result_path = result_files[0].path
+        if ae_package_mode:
+            package_zip = _zip_ae_package(ae_paths["root"])
+            result_files.insert(0, ResultFile(
+                path=package_zip,
+                language="multi",
+                type="zip",
+                label="AE Package - ZIP"
+            ))
+            primary_result_path = package_zip
         
         update_job(
             job_id,
             status="completed",
             progress=100,
-            result_path=result_files[0].path,
+            result_path=primary_result_path,
             result_files=result_files,
             completed_at=datetime.now().isoformat()
         )
@@ -1233,6 +1471,9 @@ async def add_subtitle_from_text(
     Thêm phụ đề vào video từ text nhập trực tiếp (đa ngôn ngữ)
     """
     logger.info(f"Received add_subtitle_from_text request: source={source_lang}, targets={target_languages}")
+
+    # Force rhythm-aware timing alignment for manual text flow.
+    auto_segment_rhythm = True
 
     manual_trans = None
     if manual_translations_json:

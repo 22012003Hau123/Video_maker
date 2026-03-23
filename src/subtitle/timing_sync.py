@@ -44,6 +44,8 @@ class TimingSync:
         self.model_size = model_size
         self.model = None
         self._openai_client = None
+        self.initial_subtitle_delay = 0.25
+        self.zero_start_epsilon = 0.02
         
     def _get_openai_client(self):
         """Lấy OpenAI client"""
@@ -292,6 +294,28 @@ TASK:
         mapping = json.loads(result_text.strip())
         
         # 1. Gather all mapping segments
+        # Split non-contiguous slot ids into separate groups to avoid
+        # one subtitle being stretched across distant timeline regions.
+        def split_slot_groups(slot_ids: List[int]) -> List[List[int]]:
+            if not slot_ids:
+                return []
+            sorted_ids = sorted(set(slot_ids))
+            groups = [[sorted_ids[0]]]
+            max_time_gap = 1.2  # seconds; larger gap means separate spoken occurrence
+
+            for sid in sorted_ids[1:]:
+                prev = groups[-1][-1]
+                prev_end = float(timeline[prev]["end"])
+                cur_start = float(timeline[sid]["start"])
+                is_consecutive = sid == prev + 1
+                is_close_in_time = (cur_start - prev_end) <= max_time_gap
+
+                if is_consecutive and is_close_in_time:
+                    groups[-1].append(sid)
+                else:
+                    groups.append([sid])
+            return groups
+
         raw_segments = []
         for item in mapping:
             sub_idx = item.get("subtitle_index")
@@ -299,12 +323,20 @@ TASK:
             if sub_idx is None or sub_idx >= len(subtitles): continue
             valid_slot_ids = [s for s in slot_ids if 0 <= s < len(timeline)]
             if not valid_slot_ids: continue
-            
-            raw_segments.append({
-                "sub_idx": sub_idx,
-                "slot_ids": valid_slot_ids,
-                "text": subtitles[sub_idx]
-            })
+
+            slot_groups = split_slot_groups(valid_slot_ids)
+            if len(slot_groups) > 1:
+                logger.info(
+                    f"Split non-contiguous slot mapping for subtitle[{sub_idx}] "
+                    f"from {sorted(set(valid_slot_ids))} into {slot_groups}"
+                )
+
+            for group_ids in slot_groups:
+                raw_segments.append({
+                    "sub_idx": sub_idx,
+                    "slot_ids": group_ids,
+                    "text": subtitles[sub_idx]
+                })
             
         # 2. Sort by slot order (chronological) then sub_idx
         raw_segments.sort(key=lambda x: (min(x['slot_ids']), x['sub_idx']))
@@ -347,7 +379,39 @@ TASK:
             
             i = j
             
-        return aligned
+        return self._apply_initial_delay_with_index(aligned)
+
+    def _apply_initial_delay_with_index(
+        self,
+        aligned: List[Tuple[float, float, str, int]]
+    ) -> List[Tuple[float, float, str, int]]:
+        """Delay subtitles that start at ~0s to avoid instant first-frame render."""
+        adjusted = []
+        for start, end, text, original_idx in aligned:
+            new_start = start
+            new_end = end
+            if start <= self.zero_start_epsilon:
+                new_start = self.initial_subtitle_delay
+                if new_end <= new_start:
+                    new_end = new_start + 0.05
+            adjusted.append((new_start, new_end, text, original_idx))
+        return adjusted
+
+    def _apply_initial_delay_no_index(
+        self,
+        aligned: List[Tuple[float, float, str]]
+    ) -> List[Tuple[float, float, str]]:
+        """Delay subtitles that start at ~0s to avoid instant first-frame render."""
+        adjusted = []
+        for start, end, text in aligned:
+            new_start = start
+            new_end = end
+            if start <= self.zero_start_epsilon:
+                new_start = self.initial_subtitle_delay
+                if new_end <= new_start:
+                    new_end = new_start + 0.05
+            adjusted.append((new_start, new_end, text))
+        return adjusted
     
     def _find_best_matching_segment(
         self,
@@ -455,7 +519,7 @@ TASK:
             result.append((current_time, sub_end, sub, i))
             current_time = sub_end
             
-        return result
+        return self._apply_initial_delay_with_index(result)
     
     def smart_line_break(
         self, 
@@ -709,7 +773,7 @@ Return ONLY the JSON array."""
                 except (ValueError, KeyError):
                     continue
             
-            return aligned
+            return self._apply_initial_delay_no_index(aligned)
         except Exception as e:
             logger.error(f"Rhythm-aware alignment failed: {e}")
             # Fallback: dùng logic cũ (chia đều hoặc map cơ bản)

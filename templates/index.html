@@ -156,6 +156,12 @@
             border-color: var(--success);
             background: rgba(16, 185, 129, 0.1);
         }
+
+        .file-upload.drag-over {
+            border-color: var(--primary);
+            background: rgba(59, 130, 246, 0.16);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) inset;
+        }
         
         .file-upload .icon {
             font-size: 3rem;
@@ -529,7 +535,7 @@
         /* Export Options Redesign */
         .export-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr;
             gap: 1.5rem;
             margin-top: 0.5rem;
         }
@@ -636,7 +642,7 @@
         <div id="panel-subtitle" class="panel active">
             <h2><i class="ph ph-translate"></i> Multilingual Subtitles</h2>
             <p style="color: var(--text-muted); margin-bottom: 1.5rem;">
-                Generate AI subtitles, translate to multiple languages, and burn-in or export SRT.
+                Generate AI subtitles, translate to multiple languages, and export AE-ready subtitle sidecar files.
             </p>
             
             <form id="subtitle-form" onsubmit="submitSubtitle(event)">
@@ -695,6 +701,7 @@
                                         <th style="padding: 0.8rem; text-align: left;">ES</th>
                                         <th style="padding: 0.8rem; text-align: left;">NL</th>
                                         <th style="padding: 0.8rem; text-align: left;">JP</th>
+                                        <th style="padding: 0.8rem; text-align: center; width: 80px;">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
@@ -706,11 +713,6 @@
                         </div>
                         
                         <input type="hidden" name="subtitle_text" id="subtitle-textarea">
-                        <div style="margin-top: 0.8rem;">
-                            <label class="checkbox-label" style="font-size: 0.85rem; color: var(--text-muted);">
-                                <input type="checkbox" id="auto-segment-rhythm" checked> <i class="ph ph-waveform"></i> Auto-segment by rhythm (matches audio pacing)
-                            </label>
-                        </div>
                     </div>
                 </div>
                 
@@ -774,31 +776,6 @@
                     <div class="form-group" style="margin-top: 1.5rem;">
                         <label><i class="ph ph-hard-drives"></i> Output & Format</label>
                         <div class="export-grid">
-                            <!-- File Types -->
-                            <div style="display: flex; gap: 1rem;">
-                                <div class="export-card active" onclick="const cb = this.querySelector('input'); cb.checked = !cb.checked; this.classList.toggle('active', cb.checked);">
-                                    <input type="checkbox" name="export_video" value="1" checked onclick="event.stopPropagation(); this.parentElement.classList.toggle('active', this.checked);">
-                                    <div class="export-card-content">
-                                        <div class="export-card-icon"><i class="ph ph-film-strip"></i></div>
-                                        <div class="export-card-text">
-                                            <b>Video</b>
-                                            <span>Burned-in subs</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <div class="export-card" onclick="const cb = this.querySelector('input'); cb.checked = !cb.checked; this.classList.toggle('active', cb.checked);">
-                                    <input type="checkbox" name="export_srt" value="1" onclick="event.stopPropagation(); this.parentElement.classList.toggle('active', this.checked);">
-                                    <div class="export-card-content">
-                                        <div class="export-card-icon"><i class="ph ph-file-text"></i></div>
-                                        <div class="export-card-text">
-                                            <b>SRT</b>
-                                            <span>Sidecar file</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            
                             <!-- Format Selector -->
                             <div class="format-select-container">
                                 <label style="font-size: 0.8rem; margin-bottom: 0.5rem; display: block; color: var(--text-muted);">Encoding Preset:</label>
@@ -806,6 +783,7 @@
                                     <option value="mp4_standard">🌐 Standard (MP4 - H.264)</option>
                                     <option value="prores">🎬 ProRes 422 (.MOV - Production)</option>
                                     <option value="mp4_20mbps">🚀 High Bitrate (20Mbps - MP4)</option>
+                                    <option value="ae_package">🧩 AE Package (ProRes + WAV + SRT + JSON)</option>
                                 </select>
                                 <div id="format-info-box" class="format-info">
                                     <i class="ph ph-info"></i>
@@ -1222,6 +1200,27 @@
             });
         }
 
+        function reindexTranslationRows() {
+            const rows = document.querySelectorAll('#translation-table tbody tr');
+            rows.forEach((row, idx) => {
+                const indexCell = row.querySelector('[data-row-index]');
+                if (indexCell) indexCell.textContent = String(idx + 1);
+            });
+        }
+
+        function removeTranslationRow(btn) {
+            const row = btn.closest('tr');
+            if (!row) return;
+
+            row.remove();
+            const tbody = document.querySelector('#translation-table tbody');
+            if (tbody.children.length === 0) {
+                addTranslationRow();
+            } else {
+                reindexTranslationRows();
+            }
+        }
+
         function addTranslationRow(data = {}, index = null) {
             const tbody = document.querySelector('#translation-table tbody');
             const rowCount = index || (tbody.children.length + 1);
@@ -1229,15 +1228,24 @@
             tr.style.borderBottom = '1px solid var(--border-color)';
             
             const langs = ['en', 'fr', 'es', 'nl', 'ja'];
-            let html = `<td style="padding: 0.8rem; color: var(--text-muted); font-weight: 500;">${rowCount}</td>`;
+            let html = `<td data-row-index style="padding: 0.8rem; color: var(--text-muted); font-weight: 500;">${rowCount}</td>`;
             
             langs.forEach(lang => {
                 const text = data[lang] || '';
                 html += `<td contenteditable="true" data-lang="${lang}" style="padding: 0.8rem; border-left: 1px solid var(--border-color); outline: none; min-width: 150px;">${text}</td>`;
             });
+
+            html += `
+                <td style="padding: 0.6rem; border-left: 1px solid var(--border-color); text-align: center;">
+                    <button type="button" class="btn btn-sm" onclick="removeTranslationRow(this)" style="background: rgba(245, 87, 108, 0.15); color: #f5576c; border: 1px solid rgba(245, 87, 108, 0.35);">
+                        <i class="ph ph-trash"></i>
+                    </button>
+                </td>
+            `;
             
             tr.innerHTML = html;
             tbody.appendChild(tr);
+            reindexTranslationRows();
             
             // Auto focus if empty row
             if (!data.en) tr.querySelector('[data-lang="en"]').focus();
@@ -1303,7 +1311,7 @@
                     player.style.display = 'none';
                     img.style.display = 'none';
                     placeholder.style.display = 'flex';
-                    placeholder.innerHTML = '<i class="ph ph-file-video" style="font-size: 3rem; color: var(--primary);"></i><div style="margin-top:0.5rem">.MOV File Selected (Ready)</div><div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">Preview disabled for Prores to maximize speed.</div>';
+                    placeholder.innerHTML = '<i class="ph ph-file-video" style="font-size: 3rem; color: var(--primary);"></i><div style="margin-top:0.5rem">MOV File Selected (Ready)</div>';
                     
                     // Note: Format detection for .mov will happen on the backend during processing
                 } else {
@@ -1404,6 +1412,95 @@
                 }
             }
         }
+
+        function setupVideoDropZone(uploadId, inputSelector, onSelected) {
+            const upload = document.getElementById(uploadId);
+            if (!upload) return;
+            const input = upload.querySelector(inputSelector);
+            if (!input) return;
+
+            const preventDefaults = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            };
+
+            ["dragenter", "dragover", "dragleave", "drop"].forEach(eventName => {
+                upload.addEventListener(eventName, preventDefaults);
+            });
+
+            ["dragenter", "dragover"].forEach(eventName => {
+                upload.addEventListener(eventName, () => upload.classList.add("drag-over"));
+            });
+
+            ["dragleave", "drop"].forEach(eventName => {
+                upload.addEventListener(eventName, () => upload.classList.remove("drag-over"));
+            });
+
+            upload.addEventListener("drop", (e) => {
+                const files = e.dataTransfer?.files;
+                if (!files || files.length === 0) return;
+
+                const file = files[0];
+                if (!file.type || !file.type.startsWith("video/")) {
+                    if (typeof showToast === "function") {
+                        showToast("Please drop a video file.", "error");
+                    }
+                    return;
+                }
+
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(file);
+                input.files = dataTransfer.files;
+
+                handleFileSelect(input, uploadId);
+                if (typeof onSelected === "function") {
+                    onSelected(input);
+                }
+            });
+        }
+
+        function setupExcelDropZone(containerId, inputId) {
+            const container = document.getElementById(containerId);
+            const input = document.getElementById(inputId);
+            if (!container || !input) return;
+
+            const preventDefaults = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            };
+
+            ["dragenter", "dragover", "dragleave", "drop"].forEach(eventName => {
+                container.addEventListener(eventName, preventDefaults);
+            });
+
+            ["dragenter", "dragover"].forEach(eventName => {
+                container.addEventListener(eventName, () => container.classList.add("drag-over"));
+            });
+
+            ["dragleave", "drop"].forEach(eventName => {
+                container.addEventListener(eventName, () => container.classList.remove("drag-over"));
+            });
+
+            container.addEventListener("drop", (e) => {
+                const files = e.dataTransfer?.files;
+                if (!files || files.length === 0) return;
+
+                const file = files[0];
+                const name = (file.name || "").toLowerCase();
+                const isExcel = name.endsWith(".xlsx") || name.endsWith(".xls") || name.endsWith(".csv");
+                if (!isExcel) {
+                    if (typeof showToast === "function") {
+                        showToast("Please drop an Excel/CSV file.", "error");
+                    }
+                    return;
+                }
+
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(file);
+                input.files = dataTransfer.files;
+                handleTranslationExcel(input);
+            });
+        }
         
         async function submitSubtitle(e) {
             e.preventDefault();
@@ -1418,8 +1515,10 @@
             formData.set('target_languages', selectedLangs.join(','));
             
             // 2. Handle Export Flags
-            formData.set('export_video', form.querySelector('input[name="export_video"]').checked);
-            formData.set('export_srt', form.querySelector('input[name="export_srt"]').checked);
+            // Video is always exported; SRT is auto-enabled for AE package mode.
+            const exportFormat = form.querySelector('select[name="export_format"]')?.value || 'mp4_standard';
+            formData.set('export_video', true);
+            formData.set('export_srt', exportFormat === 'ae_package');
             
             // Determine endpoint based on input mode
             let endpoint = '/api/subtitle';
@@ -1454,8 +1553,8 @@
                 // Set primary text from EN column for timing sync
                 formData.set('subtitle_text', translations['en'].join('\n'));
                 
-                const rhythmSegment = document.getElementById('auto-segment-rhythm').checked;
-                formData.set('auto_segment_rhythm', rhythmSegment);
+                // Force rhythm-aware alignment for manual text mode.
+                formData.set('auto_segment_rhythm', true);
                 endpoint = '/api/subtitle-text';
             }
             
@@ -2448,8 +2547,17 @@
             } else if (val === 'mp4_20mbps') {
                 infoText.textContent = "High quality CBR 20Mbps for professional digital delivery.";
                 infoBox.style.color = "var(--success)";
+            } else if (val === 'ae_package') {
+                infoText.textContent = "Creates AE-ready folder package: ProRes video, WAV audio, SRT, timeline JSON (+ ZIP).";
+                infoBox.style.color = "var(--accent)";
             }
         }
+
+        // Enable drag-and-drop for main video upload zones.
+        setupVideoDropZone('video-upload-1', 'input[type="file"]', updatePreview);
+        setupVideoDropZone('video-upload-2', 'input[type="file"]');
+        setupVideoDropZone('video-upload-3', 'input[type="file"]', updateMasterPreview);
+        setupExcelDropZone('excel-upload-container', 'excel-translation-input');
     </script>
 </body>
 </html>
