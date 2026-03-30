@@ -16,6 +16,8 @@ from .database import LegalContent, MediaType, UsageType, get_legal_database
 from .scene_detector import SceneDetector
 
 logger = logging.getLogger(__name__)
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+LOGO_DIR = PROJECT_ROOT / "data" / "logos"
 
 
 class LegalOverlay:
@@ -82,13 +84,13 @@ class LegalOverlay:
                 logo_name = logo_match.group(1).strip().replace(" ", "")
                 # Try common image extensions
                 for ext in ['.png', '.jpg', '.jpeg']:
-                    p = Path(f"data/logos/{logo_name}{ext}")
+                    p = LOGO_DIR / f"{logo_name}{ext}"
                     if p.exists():
                         logo_path = str(p)
                         logger.info(f"Logo detected and matched: {logo_path}")
                         break
                 if not logo_path:
-                    logger.warning(f"Logo placeholder found but file data/logos/{logo_name} not found")
+                    logger.warning(f"Logo placeholder found but file not found under {LOGO_DIR} for base name: {logo_name}")
                 # Remove placeholder from text
                 clean_text = re.sub(r'\*.*logo\*', '', legal.text).strip()
                 # Remove trailing newlines if any
