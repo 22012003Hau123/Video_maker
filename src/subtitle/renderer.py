@@ -100,6 +100,13 @@ class SubtitleRenderer:
             
         # Get advanced options from font manager
         opts = self.font_manager.get_ffmpeg_font_options(font_config.language, video_format.name)
+        alignment = opts.get("alignment", 2)
+        margin_l = opts.get("margin_l", 10)
+        margin_r = opts.get("margin_r", 10)
+        margin_v = opts.get("margin_v")
+        if margin_v is None:
+            margin_v = video_format.subtitle_margin_bottom
+        outline_color = opts.get("outline_color_ass", "&H00000000")
         
         # ASS header với style
         ass_content = f"""[Script Info]
@@ -110,7 +117,7 @@ PlayResY: {video_format.height}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Blur, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{opts['fontname']},{opts['fontsize']},&H00FFFFFF,&H000000FF,&H00000000,{opts['backcolor']},{opts['bold']},{opts['italic']},0,0,{opts['scalex']},{opts['scaley']},0,0,1,{opts['outline']},{opts['shadow']},{opts['blur']},2,10,10,{video_format.subtitle_margin_bottom},1
+Style: Default,{opts['fontname']},{opts['fontsize']},&H00FFFFFF,&H000000FF,{outline_color},{opts['backcolor']},{opts['bold']},{opts['italic']},0,0,{opts['scalex']},{opts['scaley']},0,0,1,{opts['outline']},{opts['shadow']},{opts['blur']},{alignment},{margin_l},{margin_r},{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text

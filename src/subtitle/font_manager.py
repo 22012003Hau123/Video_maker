@@ -35,18 +35,18 @@ class FontConfig:
 class FontManager:
     """Quản lý font theo ngôn ngữ"""
     
-    # Mapping font mặc định theo ngôn ngữ 
-    # Helvetica thường không có trên Linux, dùng DejaVu Sans làm fallback tương đương
+    # Mapping font mặc định theo ngôn ngữ
+    # If Helvetica is unavailable on host, renderer/fontconfig will fallback.
     DEFAULT_FONTS: Dict[str, FontConfig] = {
-        'en': FontConfig(language='en', font_family='DejaVu Sans', font_size=48),
-        'uk': FontConfig(language='uk', font_family='DejaVu Sans', font_size=48),
-        'de': FontConfig(language='de', font_family='DejaVu Sans', font_size=48),
-        'it': FontConfig(language='it', font_family='DejaVu Sans', font_size=48),
-        'fr': FontConfig(language='fr', font_family='DejaVu Sans', font_size=48),
-        'es': FontConfig(language='es', font_family='DejaVu Sans', font_size=48),
-        'nl': FontConfig(language='nl', font_family='DejaVu Sans', font_size=48),
+        'en': FontConfig(language='en', font_family='Helvetica', font_size=48),
+        'uk': FontConfig(language='uk', font_family='Helvetica', font_size=48),
+        'de': FontConfig(language='de', font_family='Helvetica', font_size=48),
+        'it': FontConfig(language='it', font_family='Helvetica', font_size=48),
+        'fr': FontConfig(language='fr', font_family='Helvetica', font_size=48),
+        'es': FontConfig(language='es', font_family='Helvetica', font_size=48),
+        'nl': FontConfig(language='nl', font_family='Helvetica', font_size=48),
         'ja': FontConfig(language='ja', font_family='Noto Sans CJK JP', font_size=48), 
-        'vi': FontConfig(language='vi', font_family='DejaVu Sans', font_size=48),
+        'vi': FontConfig(language='vi', font_family='Helvetica', font_size=48),
     }
     
     def __init__(self, fonts_dir: Optional[str] = None):
@@ -89,15 +89,30 @@ class FontManager:
         # Override parameters based on user spec for each format
         # Default behavior for non-specified formats
         adjusted_size = config.font_size
-        scale = 1.0
+        scale_x = 1.0
+        scale_y = 1.0
+        alignment = 2
+        margin_l = 10
+        margin_r = 10
+        margin_v = None
+        outline = 0
+        outline_color_ass = "&H00000000"
         
         if video_format == "16x9":
             adjusted_size = 48
         elif video_format == "9x16":
             adjusted_size = 55
+            # Story preset: top-left anchored, offset from top.
+            alignment = 7
+            margin_l = 0
+            margin_r = 0
+            margin_v = 100
+            outline = 4
+            outline_color_ass = "&H00FFFFFF"
         elif video_format == "1x1":
             adjusted_size = 48
-            scale = 1.62  # Derived from user screenshot
+            # 1x1 track style: horizontal stretch only.
+            scale_x = 1.62
         elif video_format == "4x5":
             adjusted_size = 48
             
@@ -105,14 +120,19 @@ class FontManager:
             "fontname": config.font_family,
             "fontsize": adjusted_size,
             "fontcolor": config.font_color,
-            "outline": 0,  # Disabled per spec
+            "outline": outline,
             "shadow": config.shadow_width,
             "blur": config.shadow_blur,
             "backcolor": config.shadow_color,
-            "scalex": int(100 * scale),
-            "scaley": int(100 * scale),
+            "scalex": int(100 * scale_x),
+            "scaley": int(100 * scale_y),
             "bold": 1 if config.bold else 0,
             "italic": 1 if config.italic else 0,
+            "alignment": alignment,
+            "margin_l": margin_l,
+            "margin_r": margin_r,
+            "margin_v": margin_v,
+            "outline_color_ass": outline_color_ass,
         }
     
     def get_available_languages(self) -> List[str]:

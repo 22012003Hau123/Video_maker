@@ -113,8 +113,8 @@ class LegalOverlay:
                     base_y_offset = 250
                 else: base_y_offset = 40
             elif ratio < 1.1: # 1x1
-                base_fontsize = 38
-                base_y_offset = 40 # Slightly higher for 1x1 feed safe zone
+                base_fontsize = 35
+                base_y_offset = 30
             else: # 16x9
                 base_fontsize = 35
                 base_y_offset = 30
