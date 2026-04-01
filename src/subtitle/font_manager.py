@@ -103,7 +103,7 @@ class FontManager:
         elif video_format == "9x16":
             adjusted_size = 55
             # Story preset: top-left anchored, offset from top.
-            alignment = 7
+            alignment = 2
             margin_l = 0
             margin_r = 0
             margin_v = 100
