@@ -39,6 +39,13 @@ services:
       - ./data/fonts:/app/data/fonts:ro
       # Legal templates (optional, for live updates)
       - ./data/legal_templates:/app/data/legal_templates:ro
+      # Gold POS Mastering Assets (Mounted from host because they are ignored in Git/Docker)
+      - ./src/mastering/opening:/app/src/mastering/opening:ro
+      - ./src/mastering/closing:/app/src/mastering/closing:ro
+      - ./src/mastering/full_video:/app/src/mastering/full_video:ro
+      - ./src/mastering/sound:/app/src/mastering/sound:ro
+      - ./src/mastering/logo_tagline:/app/src/mastering/logo_tagline:ro
+      - ./src/mastering/sample:/app/src/mastering/sample:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import httpx; r = httpx.get('http://localhost:8000/health'); r.raise_for_status()"]
       interval: 30s
@@ -73,6 +80,13 @@ services:
       - outputs_data:/app/outputs
       - ./data/fonts:/app/data/fonts:ro
       - ./data/legal_templates:/app/data/legal_templates:ro
+      # Gold POS Mastering Assets (Mounted from host)
+      - ./src/mastering/opening:/app/src/mastering/opening:ro
+      - ./src/mastering/closing:/app/src/mastering/closing:ro
+      - ./src/mastering/full_video:/app/src/mastering/full_video:ro
+      - ./src/mastering/sound:/app/src/mastering/sound:ro
+      - ./src/mastering/logo_tagline:/app/src/mastering/logo_tagline:ro
+      - ./src/mastering/sample:/app/src/mastering/sample:ro
 
 volumes:
   uploads_data:

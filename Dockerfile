@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     fonts-dejavu-core \
     fonts-noto-cjk \
+    fonts-inter \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
