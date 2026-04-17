@@ -1917,7 +1917,12 @@
             if (!wrap) return;
             wrap.innerHTML = lines.map(function (L, i) {
                 const r = readinessById[L.id];
-                const ok = r && r.ready;
+                let ok = r && r.ready;
+                
+                // Khóa cứng các dòng Solo theo yêu cầu người dùng
+                if (['solo_branded_sub', 'solo_branded_nosub', 'solo_clean_sub', 'solo_clean_nosub'].includes(L.id)) {
+                    ok = false;
+                }
                 const isSolo = L.label.toLowerCase().includes('solo');
                 const rowClass = 'checkbox-label gold-line-row' + (isSolo ? ' solo-warning' : '');
                 
