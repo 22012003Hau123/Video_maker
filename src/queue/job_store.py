@@ -4,9 +4,14 @@ Redis-backed job storage for API/worker shared state.
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Any, Dict, Optional
 
+from dotenv import load_dotenv
 from redis import Redis
+
+# Worker imports this module before app.py; load project .env so REDIS_URL matches the API.
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +61,12 @@ def get_job(job_id: str) -> Optional[Dict[str, Any]]:
 def update_job(job_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     current = get_job(job_id)
     if current is None:
+        logger.warning(
+            "update_job: no Redis record for job_id=%s (REDIS_URL=%s). "
+            "Worker and API must use the same Redis; ensure .env is loaded for rq worker.",
+            job_id,
+            REDIS_URL,
+        )
         return None
     current.update(updates)
     create_job(job_id, current)

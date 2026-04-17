@@ -894,34 +894,136 @@
         
         <!-- Master Panel -->
         <div id="panel-master" class="panel">
-            <h2><i class="ph ph-faders"></i> Video Mastering <span style="font-size: 0.6em; color: var(--accent); font-weight: 400;">AI-Powered</span></h2>
-            
-            <!-- Step 1: Upload Video + Preview -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 0.5rem;">
-                <div class="form-group">
-                    <label>Video File</label>
-                    <label class="file-upload" id="video-upload-3" style="min-height: 180px;">
-                        <input type="file" id="master-video-input" accept="video/*" onchange="handleFileSelect(this, 'video-upload-3'); updateMasterPreview(this);">
-                        <div class="icon"><i class="ph ph-video-camera"></i></div>
-                        <div>Drag & drop source video</div>
-                    </label>
-                </div>
-                <div class="form-group">
-                    <label>Preview</label>
-                    <div id="master-preview-container" style="background: var(--surface-light); border-radius: 12px; min-height: 180px; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid var(--border-color);">
-                        <video id="master-preview-player" controls style="width: 100%; height: 180px; object-fit: contain; display: none;"></video>
-                        <img id="master-preview-img" style="width: 100%; height: 180px; object-fit: contain; display: none;">
-                        <span id="master-preview-placeholder" style="color: var(--text-muted);"><i class="ph ph-film-strip"></i> Preview will appear here</span>
+            <h2><i class="ph ph-faders"></i> Video Mastering <span style="font-size: 0.6em; color: var(--accent); font-weight: 400;">AI + Gold POS</span></h2>
+
+            <div class="master-subtabs" style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem;">
+                <button type="button" class="master-subtab active" id="master-subtab-gold" onclick="switchMasterSubtab('gold')"><i class="ph ph-storefront"></i> Burberry Gold POS</button>
+                <button type="button" class="master-subtab" id="master-subtab-ai" onclick="switchMasterSubtab('ai')"><i class="ph ph-video-camera"></i> Scene AI (upload)</button>
+            </div>
+
+            <!-- Gold POS: manifest-driven plan (subset of 160 outputs per VO) -->
+            <div id="master-subpanel-gold" class="master-subpanel">
+                <div class="grid-2" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start;">
+                    <div class="form-group">
+                        <label>Version (VO)</label>
+                        <select id="gold-vo" onchange="goldOnVoChange()">
+                            <option value="vo1">VO1</option>
+                            <option value="vo2">VO2</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Matrix (full grid)</label>
+                        <div id="gold-matrix-hint" style="font-size: 0.85rem; color: var(--text-muted); padding: 0.5rem; background: var(--surface-light); border-radius: 8px;">Loading…</div>
                     </div>
                 </div>
+                <div id="gold-asset-banner" style="display: none; margin-bottom: 1rem; font-size: 0.82rem; padding: 0.65rem 0.85rem; border-radius: 8px;"></div>
+                <div class="form-group">
+                    <label>Deliverable lines (tick từng dòng cần xử lý)</label>
+                    <div id="gold-lines-wrap" style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 220px; overflow: auto; padding: 0.5rem; background: var(--surface-light); border-radius: 8px; font-size: 0.85rem;"></div>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
+                    <div class="form-group">
+                        <label>Formats</label>
+                        <div id="gold-formats-wrap" style="display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>Lengths (s)</label>
+                        <div id="gold-durations-wrap" style="display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>Export codecs</label>
+                        <div id="gold-codecs-wrap" style="display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
+                    </div>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center;">
+                    <button type="button" class="btn btn-primary" id="gold-plan-btn" onclick="submitGoldPlan()"><i class="ph ph-list-checks"></i> Preview plan (count + sample)</button>
+                    <button type="button" class="btn btn-primary" id="gold-render-btn" onclick="submitGoldRender()" style="background:var(--success);border:none;"><i class="ph ph-play"></i> Queue render (batch)</button>
+                </div>
+                <div id="gold-plan-status" style="margin-top: 1rem; font-size: 0.9rem; color: var(--text-muted);"></div>
+                <pre id="gold-plan-json" style="display: none; margin-top: 0.75rem; padding: 1rem; background: #0c1222; border-radius: 8px; font-size: 0.75rem; max-height: 320px; overflow: auto; white-space: pre-wrap; word-break: break-all;"></pre>
             </div>
 
-            <!-- Mastering features are in-progress: keep upload/preview only -->
-            <div style="margin-top: 1.2rem; padding: 1rem 1.2rem; border-radius: 10px; border: 1px dashed var(--border-color); background: var(--surface-light); color: var(--text-muted);">
-                <b style="color: var(--accent);">In Progress:</b> Mastering automation modules are coming soon.
+            <!-- Scene AI: existing upload -->
+            <div id="master-subpanel-ai" class="master-subpanel" style="display: none;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 0.5rem;">
+                    <div class="form-group">
+                        <label>Video File</label>
+                        <label class="file-upload" id="video-upload-3" style="min-height: 180px;">
+                            <input type="file" id="master-video-input" accept="video/*" onchange="handleFileSelect(this, 'video-upload-3'); updateMasterPreview(this);">
+                            <div class="icon"><i class="ph ph-video-camera"></i></div>
+                            <div>Drag & drop source video</div>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>Preview</label>
+                        <div id="master-preview-container" style="background: var(--surface-light); border-radius: 12px; min-height: 180px; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid var(--border-color);">
+                            <video id="master-preview-player" controls style="width: 100%; height: 180px; object-fit: contain; display: none;"></video>
+                            <img id="master-preview-img" style="width: 100%; height: 180px; object-fit: contain; display: none;">
+                            <span id="master-preview-placeholder" style="color: var(--text-muted);"><i class="ph ph-film-strip"></i> Preview will appear here</span>
+                        </div>
+                    </div>
+                </div>
+                <p style="color: var(--text-muted); font-size: 0.9rem;">Dùng video này cho phân tích scene / smart cut / logo (API <code>/api/master/…</code>).</p>
             </div>
 
-
+            <style>
+                .master-subtab {
+                    padding: 0.6rem 1rem;
+                    border-radius: 10px;
+                    border: 1px solid var(--surface-light);
+                    background: var(--surface-light);
+                    color: var(--text-muted);
+                    cursor: pointer;
+                    font-size: 0.95rem;
+                    transition: all 0.2s ease;
+                }
+                .master-subtab:hover {
+                    background: var(--surface);
+                }
+                .master-subtab.active {
+                    background: var(--primary);
+                    color: #fff;
+                    border-color: var(--primary);
+                    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+                }
+                
+                /* Premium Styling for Gold Deliverable Lines */
+                .gold-line-row {
+                    transition: all 0.2s ease;
+                    border: 1px solid rgba(255,255,255,0.05) !important;
+                }
+                .gold-line-row:hover {
+                    transform: translateX(4px);
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+                }
+                .gold-line-row.solo-warning {
+                    background: rgba(239, 68, 68, 0.1) !important;
+                    border-color: rgba(239, 68, 68, 0.3) !important;
+                    color: #fca5a5 !important;
+                }
+                .gold-line-not-ready {
+                    background: rgba(239, 68, 68, 0.2);
+                    color: #fca5a5;
+                    font-size: 0.7rem;
+                    padding: 2px 6px;
+                    border-radius: 4px;
+                    text-transform: uppercase;
+                }
+                .status-percent {
+                    background: var(--gradient-primary);
+                    -webkit-background-clip: text;
+                    background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                }
+                .status-compact-step {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    font-size: 0.85rem;
+                    color: var(--text-muted);
+                    padding: 0.2rem 0;
+                }
+            </style>
 
             <!-- Master Status (kept for subtitle/legal polling compatibility) -->
             <div id="master-status" class="status-box" style="display: none; margin-top: 1.5rem;"></div>
@@ -1044,6 +1146,9 @@
             
             event.target.classList.add('active');
             document.getElementById('panel-' + tabName).classList.add('active');
+            if (tabName === 'master' && typeof loadGoldManifest === 'function') {
+                loadGoldManifest();
+            }
         }
         
         let currentInputMode = 'auto';
@@ -1695,6 +1800,256 @@
         // === Mastering AI Functions ===
         let currentSceneJobId = null;
 
+        let goldManifestLoaded = false;
+        let goldManifestData = null;
+
+        function switchMasterSubtab(which) {
+            const g = document.getElementById('master-subtab-gold');
+            const a = document.getElementById('master-subtab-ai');
+            if (g) g.classList.toggle('active', which === 'gold');
+            if (a) a.classList.toggle('active', which === 'ai');
+            const pg = document.getElementById('master-subpanel-gold');
+            const pa = document.getElementById('master-subpanel-ai');
+            if (pg) pg.style.display = which === 'gold' ? 'block' : 'none';
+            if (pa) pa.style.display = which === 'ai' ? 'block' : 'none';
+            if (which === 'gold') loadGoldManifest();
+        }
+
+        async function loadGoldManifest() {
+            const hint = document.getElementById('gold-matrix-hint');
+            try {
+                const r = await fetch('/api/mastering/gold-manifest');
+                if (!r.ok) throw new Error(await r.text());
+                goldManifestData = await r.json();
+                goldManifestLoaded = true;
+                const m = goldManifestData.matrix || {};
+                if (hint) {
+                    hint.innerHTML = `<strong>${m.content_variants_per_vo || '—'}</strong> nội dung/VO (8 lines×4×5) → <strong>${m.file_outputs_per_vo || m.outputs_per_vo || '—'}</strong> file/VO (×${m.codecs || 2} codec) · cả hai VO: <strong>${m.outputs_total_both_vo || '—'}</strong> file`;
+                }
+                renderGoldFilters();
+                renderGoldAssetBanner();
+                renderGoldLines();
+            } catch (e) {
+                if (hint) hint.textContent = 'Could not load manifest: ' + e.message;
+            }
+        }
+
+        function _goldChipHtml(ok, innerLabel, inputName, inputValue, checked) {
+            const st = ok
+                ? 'background:#ffffff;color:#0f172a;border:1px solid #e2e8f0;'
+                : 'background:#b91c1c;color:#f8fafc;border:1px solid #7f1d1d;';
+            const dis = ok ? '' : ' disabled';
+            const chk = ok && checked ? ' checked' : '';
+            const suf = ok ? '' : '<span style="font-weight:700;margin-left:0.25rem;">không đủ</span>';
+            return '<label class="checkbox-label" style="display:inline-flex;align-items:center;flex-wrap:wrap;gap:0.25rem;padding:0.35rem 0.5rem;border-radius:8px;cursor:' + (ok ? 'pointer' : 'not-allowed') + ';' + st + '">' +
+                '<input type="checkbox" name="' + inputName + '" value="' + inputValue + '"' + chk + dis + '>' +
+                innerLabel + suf + '</label>';
+        }
+
+        function renderGoldAssetBanner() {
+            const el = document.getElementById('gold-asset-banner');
+            if (!el || !goldManifestData || !goldManifestData.asset_flags) return;
+            const af = goldManifestData.asset_flags;
+            const bad = [];
+            if (!af.opening_ok) bad.push('Opening');
+            if (!af.full_video_ok) bad.push('Full video');
+            if (!af.closing_duo_ok) bad.push('Closing duo 16:9');
+            if (af.closing_solo_placeholder) bad.push('Closing solo (chưa file riêng, đang trùng duo)');
+            Object.keys(af.wav_by_duration || {}).forEach(function (d) {
+                if (!af.wav_by_duration[d]) bad.push('WAV ' + d + 's');
+            });
+            Object.keys(af.logo_by_format || {}).forEach(function (fid) {
+                if (!af.logo_by_format[fid]) bad.push('Logo ' + fid);
+            });
+            Object.keys(af.surimp_vo2_solo || {}).forEach(function (fid) {
+                if (!af.surimp_vo2_solo[fid]) bad.push('Surimp VO2 solo ' + fid);
+            });
+            if (bad.length === 0) {
+                el.style.display = 'none';
+                el.innerHTML = '';
+                return;
+            }
+            el.style.display = 'block';
+            el.style.background = 'rgba(185,28,28,0.22)';
+            el.style.border = '1px solid #b91c1c';
+            el.style.color = '#fecaca';
+            el.innerHTML = '<strong>Thiếu / chưa đủ:</strong> ' + bad.join(' · ');
+        }
+
+        function renderGoldFilters() {
+            if (!goldManifestData) return;
+            const af = goldManifestData.asset_flags || {};
+            const fw = document.getElementById('gold-formats-wrap');
+            const dw = document.getElementById('gold-durations-wrap');
+            const cw = document.getElementById('gold-codecs-wrap');
+            if (fw) {
+                fw.innerHTML = (goldManifestData.formats || []).map(function (f) {
+                    const logoOk = af.logo_by_format && af.logo_by_format[f.id] === true;
+                    return _goldChipHtml(logoOk, f.id + ' (' + f.width + '×' + f.height + ')', 'gold-fmt', f.id, true);
+                }).join('');
+            }
+            if (dw) {
+                dw.innerHTML = (goldManifestData.durations_seconds || []).map(function (d) {
+                    const wavOk = af.wav_by_duration && af.wav_by_duration[String(d)] === true;
+                    return _goldChipHtml(wavOk, d + 's', 'gold-dur', d, true);
+                }).join('');
+            }
+            if (cw) {
+                cw.innerHTML = (goldManifestData.export_codecs || []).map(function (c) {
+                    return _goldChipHtml(true, c.label || c.id, 'gold-codec', c.id, true);
+                }).join('');
+            }
+        }
+
+        function goldOnVoChange() {
+            renderGoldLines();
+        }
+
+        function renderGoldLines() {
+            if (!goldManifestData) return;
+            const vo = document.getElementById('gold-vo').value;
+            const wrap = document.getElementById('gold-lines-wrap');
+            const lines = (goldManifestData.deliverable_lines || {})[vo] || [];
+            const readinessById = {};
+            (goldManifestData.readiness && goldManifestData.readiness[vo] || []).forEach(function (r) {
+                readinessById[r.id] = r;
+            });
+            if (!wrap) return;
+            wrap.innerHTML = lines.map(function (L, i) {
+                const r = readinessById[L.id];
+                const ok = r && r.ready;
+                const isSolo = L.label.toLowerCase().includes('solo');
+                const rowClass = 'checkbox-label gold-line-row' + (isSolo ? ' solo-warning' : '');
+                
+                const rowStyle = ok
+                    ? 'background:#ffffff;color:#0f172a;'
+                    : (isSolo ? '' : 'background:#b91c1c;color:#f8fafc;');
+                
+                const disabled = ok ? '' : ' disabled';
+                const checked = ok ? ' checked' : '';
+                const tip = ok ? '' : (' title="Thiếu: ' + (r.missing || []).join(', ') + '"');
+                const suffix = ok ? '' : '<span class="gold-line-not-ready">không đủ</span>';
+                
+                return '<label class="' + rowClass + '"' + tip + ' style="display:flex;align-items:flex-start;gap:0.5rem;' + rowStyle + 'padding:0.45rem 0.6rem;border-radius:10px;cursor:' + (ok ? 'pointer' : 'not-allowed') + ';">' +
+                    '<input type="checkbox" name="gold-line" value="' + L.id + '"' + checked + disabled + '>' +
+                    '<span style="flex:1;">' + (i + 1) + '. ' + L.label + '</span>' +
+                    suffix +
+                    '</label>';
+            }).join('');
+        }
+
+        function _goldChecked(name) {
+            return Array.from(document.querySelectorAll(`input[name="${name}"]:checked`)).map(el => el.value);
+        }
+
+        function _goldRequestBody() {
+            const vo = document.getElementById('gold-vo').value;
+            const lineIds = _goldChecked('gold-line').map(String);
+            const formats = _goldChecked('gold-fmt').map(String);
+            const durs = _goldChecked('gold-dur').map(s => parseInt(s, 10));
+            const codecs = _goldChecked('gold-codec').map(String);
+            if (!lineIds.length) {
+                return { error: 'Chọn ít nhất một deliverable line.' };
+            }
+            return {
+                body: {
+                    vo,
+                    line_ids: lineIds,
+                    formats,
+                    durations_seconds: durs,
+                    export_codec_ids: codecs
+                }
+            };
+        }
+
+        async function submitGoldPlan() {
+            const status = document.getElementById('gold-plan-status');
+            const pre = document.getElementById('gold-plan-json');
+            const btn = document.getElementById('gold-plan-btn');
+            const gr = _goldRequestBody();
+            if (gr.error) {
+                alert(gr.error);
+                return;
+            }
+            const body = gr.body;
+            if (status) status.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Planning…';
+            if (btn) btn.disabled = true;
+            try {
+                const r = await fetch('/api/mastering/gold-plan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await r.json();
+                if (!r.ok) throw new Error(data.detail || JSON.stringify(data));
+                if (status) {
+                    let html = `<div style="padding: 1rem; background: var(--surface); border-radius: 10px; border: 1px solid var(--border-color);">
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; color: var(--success); font-weight: 700;">
+                            <i class="ph ph-check-circle"></i> Batch Plan Ready
+                        </div>
+                        <div style="font-size: 0.9rem; margin-bottom: 0.4rem;"><b>${data.count}</b> jobs intended for VO: <code>${data.vo}</code></div>
+                    `;
+                    if (data.first_job_assets) {
+                        const a = data.first_job_assets;
+                        html += `
+                            <div style="font-size: 0.75rem; color: var(--text-muted); padding: 0.5rem; background: rgba(255,255,255,0.03); border-radius: 6px;">
+                                <b>Check mẫu:</b> 
+                                WAV: ${a.wav?.exists ? '✅' : '❌'} | 
+                                Logo: ${a.logo?.exists ? '✅' : '❌'} | 
+                                Surimp: ${a.surimp?.exists ? '✅' : '❌'}
+                            </div>
+                        `;
+                    }
+                    html += `</div>`;
+                    status.innerHTML = html;
+                }
+                if (pre) pre.style.display = 'none';
+            } catch (e) {
+                if (status) status.innerHTML = '<span style="color:var(--error)">' + e.message + '</span>';
+            }
+            if (btn) btn.disabled = false;
+        }
+
+        async function submitGoldRender() {
+            const status = document.getElementById('gold-plan-status');
+            const pre = document.getElementById('gold-plan-json');
+            const btn = document.getElementById('gold-render-btn');
+            const gr = _goldRequestBody();
+            if (gr.error) {
+                alert(gr.error);
+                return;
+            }
+            // Bỏ confirm theo yêu cầu user - bấm là chạy luôn
+            // if (!confirm('Queue render batch? Cần worker RQ; có thể mất nhiều thời gian.')) return;
+            const body = gr.body;
+            if (status) status.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Đang gửi queue…';
+            if (btn) btn.disabled = true;
+            try {
+                const r = await fetch('/api/mastering/gold-render', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await r.json();
+                if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || data));
+                const jobId = data.job_id;
+                const workerHint = data.worker_hint || '';
+                const appRedis = data.redis_url || '';
+                const qName = data.queue_name || '';
+                const pollStarted = Date.now();
+                if (status) {
+                    status.style.display = 'block';
+                    status.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Job <code>' + jobId + '</code> queued...';
+                }
+                if (pre) pre.style.display = 'none';
+
+                pollJobStatus(jobId, 'gold-plan-status');
+            } catch (e) {
+                if (status) status.innerHTML = '<span style="color:var(--error)">' + e.message + '</span>';
+                if (btn) btn.disabled = false;
+            }
+        }
+
         async function updateMasterPreview(input) {
             const player = document.getElementById('master-preview-player');
             const img = document.getElementById('master-preview-img');
@@ -1714,12 +2069,6 @@
                     img.style.display = 'none';
                     if (placeholder) placeholder.style.display = 'none';
                     
-                    // Optional: Get dimensions for master panel if needed
-                    const tempVideo = document.createElement('video');
-                    tempVideo.src = videoUrl;
-                    tempVideo.onloadedmetadata = () => {
-                        console.log("Master Video Dimensions:", tempVideo.videoWidth, "x", tempVideo.videoHeight);
-                    };
                 }
                 clearMasterResults();
             } else {
@@ -2382,17 +2731,29 @@
                     const job = await response.json();
                     
                     const progress = job.progress || 0;
+                    const msg = job.message || 'Processing...';
+                    const stepMatch = msg.match(/Step (\d\/\d): (.*)/);
+                    let stepHtml = '';
+                    if (stepMatch) {
+                        stepHtml = `<div class="status-compact-step"><i class="ph ph-circle-dashed ph-spin"></i> <b>Step ${stepMatch[1]}</b>: ${stepMatch[2]}</div>`;
+                    } else if (job.status === 'processing') {
+                        stepHtml = `<div class="status-compact-step"><i class="ph ph-gear ph-spin"></i> ${msg}</div>`;
+                    }
+
                     let html = `
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
-                            <h3 style="margin: 0; font-size: 1rem; color: var(--primary);">Processing Status</h3>
-                            <span class="status-percent" style="font-size: 1.1rem; font-weight: 700;">${progress}%</span>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 0.8rem;">
+                            <div>
+                                <h3 style="margin: 0 0 0.2rem 0; font-size: 0.9rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">Mastering Pipeline</h3>
+                                ${stepHtml}
+                            </div>
+                            <span class="status-percent" style="font-size: 1.5rem; font-weight: 800; line-height: 1;">${progress}%</span>
                         </div>
-                        <div class="progress-bar" style="background: rgba(255,255,255,0.05); height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 1rem;">
-                            <div class="fill" style="width: ${progress}%; height: 100%; background: var(--gradient-primary); transition: width 0.3s ease;"></div>
+                        <div class="progress-bar" style="background: rgba(255,255,255,0.05); height: 10px; border-radius: 5px; overflow: hidden; margin-bottom: 1rem; border: 1px solid rgba(255,255,255,0.05);">
+                            <div class="fill" style="width: ${progress}%; height: 100%; background: var(--gradient-primary); transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);"></div>
                         </div>
                         <div class="status-text">
-                            <span class="status-label ${job.status === 'completed' ? 'status-completed' : ''} ${job.status === 'failed' ? 'status-failed' : ''}">
-                                ${job.status === 'completed' ? '<i class="ph ph-check-circle"></i> Completed!' : job.status === 'failed' ? '<i class="ph ph-x-circle"></i> Error: ' + job.error : '<i class="ph ph-hourglass-high"></i> ' + (job.message || 'Processing...')}
+                            <span class="status-label ${job.status === 'completed' ? 'status-completed' : ''} ${job.status === 'failed' ? 'status-failed' : ''}" style="padding: 0.4rem 0.8rem; border-radius: 8px; font-weight: 500;">
+                                ${job.status === 'completed' ? '<i class="ph ph-check-circle"></i> Pipeline Finalized' : job.status === 'failed' ? '<i class="ph ph-x-circle"></i> Failure: ' + job.error : '<i class="ph ph-lightning"></i> Optimization in progress...'}
                             </span>
                         </div>
                     `;
@@ -2409,6 +2770,17 @@
                             const videoCandidates = buildPreviewVideoCandidates(job.result_path, downloadUrl);
                             const videoUrl = videoCandidates[0] || downloadUrl;
                             const videoFallbacks = videoCandidates.slice(1).join('|');
+
+                            // AUTO-LOAD into main preview player if exists
+                            const mainPlayer = document.getElementById('master-preview-player');
+                            const mainImg = document.getElementById('master-preview-img');
+                            const mainPlaceholder = document.getElementById('master-preview-placeholder');
+                            if (mainPlayer && !isProRes) {
+                                mainPlayer.src = videoUrl;
+                                mainPlayer.style.display = 'block';
+                                if (mainImg) mainImg.style.display = 'none';
+                                if (mainPlaceholder) mainPlaceholder.style.display = 'none';
+                            }
                             
                             html += `
                                 <div style="margin-top: 1.5rem; background: var(--surface-light); border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color);">
@@ -2464,7 +2836,32 @@
                                             </div>
                                         `}
                                         <div style="padding: 0.75rem;">
-                                            <div style="font-weight: 600; margin-bottom: 0.5rem; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${file.label || 'Result'}</div>
+                                            <div style="font-weight: 600; margin-bottom: 0.2rem; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${file.label || 'Result'}</div>
+                                            
+                                            ${(file.metadata && file.metadata.ai_enabled) ? `
+                                                <div class="ai-findings" style="margin-bottom: 0.8rem; padding: 0.6rem; background: rgba(59, 130, 246, 0.08); border-radius: 6px; font-size: 0.75rem;">
+                                                    <div style="display: flex; align-items: center; gap: 0.4rem; font-weight: 700; color: var(--primary); margin-bottom: 0.3rem;">
+                                                        <i class="ph ph-brain"></i> AI Analysis
+                                                    </div>
+                                                    <div style="display: flex; flex-direction: column; gap: 0.2rem; color: var(--text-muted);">
+                                                        ${file.metadata.logo_detection && file.metadata.logo_detection.found ? 
+                                                            `<div><i class="ph ph-tag"></i> Original Logo: <b>${file.metadata.logo_detection.corner}</b></div>` : 
+                                                            `<div><i class="ph ph-tag"></i> No existing logo detected</div>`}
+                                                        
+                                                        ${file.metadata.subject_detection && file.metadata.subject_detection.found ? 
+                                                            `<div><i class="ph ph-target"></i> Product: <b>${file.metadata.subject_detection.label}</b></div>` : 
+                                                            `<div><i class="ph ph-target"></i> Product not detected</div>`}
+                                                        
+                                                        <div style="margin-top: 0.2rem; color: var(--primary); font-weight: 600;">
+                                                            <i class="ph ph-layout"></i> Overlay: <b>${file.metadata.branding_corner || 'top-center'}</b>
+                                                        </div>
+                                                        
+                                                        ${file.metadata.subtitle_sync && file.metadata.subtitle_sync.status === 'ok' ?
+                                                            ` <div style="color: var(--success);"><i class="ph ph-closed-captioning"></i> AI Sync: <b>Matched</b></div>` : ''}
+                                                    </div>
+                                                </div>
+                                            ` : ''}
+
                                             <a href="${fileUrl}" download class="btn btn-sm" style="width: 100%; justify-content: center; background: var(--surface); border: 1px solid var(--border-color); color: var(--text); text-decoration: none;">
                                                 <i class="ph ph-download-simple"></i> Download
                                             </a>
@@ -2475,9 +2872,13 @@
                             html += '</div>';
                         }
                         
-                        // Re-enable submit buttons
+                        // Re-enable ALL mastering buttons specifically
+                        document.getElementById('gold-render-btn').disabled = false;
+                        document.getElementById('gold-plan-btn').disabled = false;
                         document.querySelectorAll('button[type="submit"]').forEach(b => b.disabled = false);
                     } else if (job.status === 'failed') {
+                        document.getElementById('gold-render-btn').disabled = false;
+                        document.getElementById('gold-plan-btn').disabled = false;
                          document.querySelectorAll('button[type="submit"]').forEach(b => b.disabled = false);
                     }
                     
@@ -2515,6 +2916,20 @@
                 infoBox.style.color = "var(--accent)";
             }
         }
+        
+        // Auto-reset "Finalized" status when user changes selections
+        ['gold-formats-wrap', 'gold-durations-wrap', 'gold-codecs-wrap', 'gold-lines-wrap'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('change', () => {
+                   const status = document.getElementById('gold-plan-status');
+                   // If status is "Finalized" or "Ready", clear it when selection changes
+                   if (status && (status.innerHTML.includes('Finalized') || status.innerHTML.includes('Ready'))) {
+                       status.innerHTML = '';
+                   }
+                });
+            }
+        });
 
         // Enable drag-and-drop for main video upload zones.
         setupVideoDropZone('video-upload-1', 'input[type="file"]', updatePreview);

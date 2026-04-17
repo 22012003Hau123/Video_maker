@@ -59,7 +59,10 @@ logs/
 .DS_Store
 Thumbs.db
 
-# Data (keep structure, ignore content)
-data/fonts/*.ttf
-data/fonts/*.otf
-data/samples/*.mp4
+# Mastering Assets (Large binaries)
+src/mastering/closing/
+src/mastering/full_video/
+src/mastering/logo_tagline/
+src/mastering/opening/
+src/mastering/sample/
+src/mastering/sound/

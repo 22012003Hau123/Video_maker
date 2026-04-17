@@ -44,7 +44,7 @@ class TimingSync:
         self.model_size = model_size
         self.model = None
         self._openai_client = None
-        self.initial_subtitle_delay = 0.25
+        self.initial_subtitle_delay = 0.05
         self.zero_start_epsilon = 0.02
         
     def _get_openai_client(self):
@@ -61,9 +61,9 @@ class TimingSync:
             self.model = whisper.load_model(self.model_size)
         return self.model
     
-    def transcribe(self, audio_path: str, language: str = "auto", prompt: Optional[str] = None) -> Tuple[List[TranscriptSegment], str]:
+    def transcribe(self, audio_path: str, language: str = "auto", prompt: Optional[str] = None) -> Tuple[List[TranscriptSegment], str, List[dict]]:
         """
-        Transcribe audio và lấy timing
+        Transcribe audio và lấy timing (bao gồm word-level)
         
         Args:
             audio_path: Đường dẫn file audio/video
@@ -71,14 +71,14 @@ class TimingSync:
             prompt: Text gợi ý cho Whisper (giúp nhận diện brand name tốt hơn)
             
         Returns:
-            Tuple (Danh sách TranscriptSegment với timing, Mã ngôn ngữ đã nhận diện)
+            Tuple (Danh sách TranscriptSegment, Mã ngôn ngữ, Danh sách word-level timings)
         """
         if self.use_local:
             return self._transcribe_local(audio_path, language, prompt)
         else:
             return self._transcribe_api(audio_path, language, prompt)
     
-    def _transcribe_local(self, audio_path: str, language: str, prompt: Optional[str] = None) -> Tuple[List[TranscriptSegment], str]:
+    def _transcribe_local(self, audio_path: str, language: str, prompt: Optional[str] = None) -> Tuple[List[TranscriptSegment], str, List[dict]]:
         """Transcribe sử dụng Whisper local"""
         model = self._load_local_model()
         if model is None:
@@ -101,20 +101,22 @@ class TimingSync:
                 confidence=seg.get("no_speech_prob", 0)
             ))
         
-        return segments, detected_lang
+        return segments, detected_lang, []
     
-    def _transcribe_api(self, audio_path: str, language: str, prompt: Optional[str] = None) -> Tuple[List[TranscriptSegment], str]:
+    def _transcribe_api(self, audio_path: str, language: str, prompt: Optional[str] = None) -> Tuple[List[TranscriptSegment], str, List[dict]]:
         """Transcribe sử dụng OpenAI Whisper API"""
         client = self._get_openai_client()
         
         with open(audio_path, "rb") as audio_file:
+            # Add strict timeout to avoid hanging the entire pipeline if OpenAI is slow
             response = client.audio.transcriptions.create(
                 model="whisper-1",
                 file=audio_file,
                 language=language if language != "auto" else None,
                 prompt=prompt,
                 response_format="verbose_json",
-                timestamp_granularities=["word", "segment"]
+                timestamp_granularities=["word", "segment"],
+                timeout=60.0 # 1 minute max for 20s audio
             )
         
         detected_lang = getattr(response, 'language', language)
@@ -187,8 +189,73 @@ class TimingSync:
                 text=text
             ))
         
-        return segments, detected_lang
+        return segments, detected_lang, word_timings
     
+    def align_subtitles_to_words(
+        self,
+        subtitles: List[str],
+        word_timings: List[dict],
+        min_duration: float = 0.5
+    ) -> List[Tuple[float, float, str, int]]:
+        """
+        Căn timing 100% chính xác bằng cách khớp từng từ trong phụ đề với word_timings từ Whisper.
+        """
+        if not word_timings:
+            # Fallback to segments if word timings missing
+            return self._distribute_evenly(subtitles, 0, 20.0, min_duration)
+
+        aligned = []
+        word_idx = 0
+        
+        # Clean words from transcript for better matching
+        clean_transcript_words = []
+        for wt in word_timings:
+            wText = wt["word"].lower().strip().strip(".,!?\"'")
+            if wText:
+                clean_transcript_words.append({
+                    "text": wText,
+                    "start": wt["start"],
+                    "end": wt["end"]
+                })
+
+        for i, sub_text in enumerate(subtitles):
+            sub_words = sub_text.lower().strip().split()
+            if not sub_words: continue
+            
+            # Find the best starting word in the transcript
+            line_start = None
+            line_end = None
+            
+            # Simple matching: advance word_idx until we find the first word of the line
+            while word_idx < len(clean_transcript_words):
+                if clean_transcript_words[word_idx]["text"] == sub_words[0].strip(".,!?\"'"):
+                    line_start = clean_transcript_words[word_idx]["start"]
+                    # Found start, now advance to find the last word
+                    # Advance up to len(sub_words) pieces
+                    lookahead = min(len(sub_words) + 2, len(clean_transcript_words) - word_idx)
+                    best_end_idx = word_idx
+                    for k in range(lookahead):
+                        # Match current word
+                        if k < len(sub_words):
+                            target_w = sub_words[k].strip(".,!?\"'")
+                            actual_w = clean_transcript_words[word_idx+k]["text"]
+                            if target_w == actual_w:
+                                best_end_idx = word_idx+k
+                    
+                    line_end = clean_transcript_words[best_end_idx]["end"]
+                    word_idx = best_end_idx + 1 # Next line starts after this
+                    break
+                word_idx += 1
+            
+            if line_start is not None:
+                aligned.append((line_start, line_end, sub_text, i))
+            else:
+                # Fallback for this line: place it after last line
+                prev_end = aligned[-1][1] if aligned else 0.1
+                aligned.append((prev_end + 0.1, prev_end + 2.0, sub_text, i))
+
+        return self._apply_initial_delay_with_index(aligned)
+
     def align_subtitles(
         self, 
         subtitles: List[str], 

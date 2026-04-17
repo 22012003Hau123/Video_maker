@@ -454,3 +454,152 @@ class LogoRemovalService:
             os.replace(temp_output, video_path)
         elif os.path.exists(temp_output):
             os.remove(temp_output)
+    def detect_subject(
+        self, video_path: str, subject_prompt: str = "perfume bottle . product .", 
+        num_samples: int = 5, threshold: float = 0.2
+    ) -> dict:
+        """
+        Detect the main subject (e.g. perfume bottle) to avoid covering it.
+        Returns relative coordinates (0-1).
+        """
+        self._load_grounding_dino()
+        cap = cv2.VideoCapture(video_path)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        v_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        v_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        
+        best_score = 0
+        best_box = None
+        
+        # Sample frames from 20%, 40%, 60%, 80% to find product
+        for i in range(num_samples):
+            target = int((total_frames * (i + 1)) / (num_samples + 1))
+            cap.set(cv2.CAP_PROP_POS_FRAMES, target)
+            ret, frame = cap.read()
+            if not ret: continue
+            
+            img_pil = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            inputs = self._gdino_processor(images=img_pil, text=subject_prompt, return_tensors="pt")
+            with torch.no_grad():
+                outputs = self._gdino_model(**inputs)
+            
+            target_sizes = torch.Tensor([img_pil.size[::-1]])
+            results = self._gdino_processor.post_process_grounded_object_detection(
+                outputs, inputs.input_ids, box_threshold=threshold, text_threshold=threshold, target_sizes=target_sizes
+            )[0]
+            
+            for score, box in zip(results["scores"], results["boxes"]):
+                if score > best_score:
+                    best_score = score.item()
+                    best_box = box.tolist()
+        
+        cap.release()
+        
+        if best_box:
+            x1, y1, x2, y2 = best_box
+            return {
+                "found": True,
+                "bbox": [x1, y1, x2 - x1, y2 - y1],
+                "x_rel": (x1 + x2) / (2 * v_w),
+                "y_rel": (y1 + y2) / (2 * v_h),
+                "confidence": best_score
+            }
+        return {"found": False}
+
+    def hunt_appearance_hybrid(
+        self, video_path: str, prompt: str = "perfume bottle . product .", 
+        threshold: float = 0.25
+    ) -> Optional[float]:
+        """
+        Hybrid scan: 
+        1. Use FFmpeg-based scene detection to find candidate frames (scene starts).
+        2. Use Grounding DINO to verify which scene first contains the subject.
+        Returns the timestamp in seconds.
+        """
+        print(f"🎬 Hybrid Hunter: Starting scene-aware scan for '{prompt}'...")
+        
+        try:
+            from .scene_detection import SceneDetector
+            sd = SceneDetector(output_dir=self.temp_dir)
+            scenes = sd.detect_scenes(video_path, threshold=25.0) # More sensitive
+            
+            if not scenes:
+                print("⚠️ Hybrid Hunter: No distinct scenes detected. Falling back to linear hunter.")
+                return self.hunt_appearance(video_path, prompt, threshold)
+            
+            self._load_grounding_dino()
+            cap = cv2.VideoCapture(video_path)
+            
+            for i, scene in enumerate(scenes):
+                # Sample the exact start of the scene
+                cap.set(cv2.CAP_PROP_POS_FRAMES, scene.start_frame)
+                ret, frame = cap.read()
+                if not ret: continue
+                
+                img_pil = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                inputs = self._gdino_processor(images=img_pil, text=prompt, return_tensors="pt")
+                with torch.no_grad():
+                    outputs = self._gdino_model(**inputs)
+                
+                target_sizes = torch.Tensor([img_pil.size[::-1]])
+                results = self._gdino_processor.post_process_grounded_object_detection(
+                    outputs, inputs.input_ids, box_threshold=threshold, text_threshold=threshold, target_sizes=target_sizes
+                )[0]
+                
+                if len(results["scores"]) > 0:
+                    timestamp = scene.start_time
+                    score = results["scores"][0].item()
+                    print(f"🎯 Hybrid Hunter MATCH: Scene {i} starts at {timestamp:.2f}s (conf={score:.2f})")
+                    cap.release()
+                    return timestamp
+            
+            cap.release()
+            print("ℹ️ Hybrid Hunter: No product found at scene starts. Trying linear scan for safety.")
+            return self.hunt_appearance(video_path, prompt, threshold)
+            
+        except Exception as e:
+            print(f"❌ Hybrid Hunter error: {e}. Falling back to linear scan.")
+            return self.hunt_appearance(video_path, prompt, threshold)
+
+    def hunt_appearance(
+        self, video_path: str, prompt: str = "perfume bottle . product .", 
+        threshold: float = 0.25, step_seconds: float = 0.4
+    ) -> Optional[float]:
+        """
+        Scan video to find the first second where the subject appears.
+        Returns the timestamp in seconds.
+        """
+        self._load_grounding_dino()
+        cap = cv2.VideoCapture(video_path)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        if fps <= 0 or total_frames <= 0:
+            cap.release()
+            return None
+        
+        # Scan every step_seconds
+        step_frames = max(1, int(step_seconds * fps))
+        
+        for f_idx in range(0, total_frames, step_frames):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, f_idx)
+            ret, frame = cap.read()
+            if not ret: break
+            
+            img_pil = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            inputs = self._gdino_processor(images=img_pil, text=prompt, return_tensors="pt")
+            with torch.no_grad():
+                outputs = self._gdino_model(**inputs)
+            
+            target_sizes = torch.Tensor([img_pil.size[::-1]])
+            results = self._gdino_processor.post_process_grounded_object_detection(
+                outputs, inputs.input_ids, box_threshold=threshold, text_threshold=threshold, target_sizes=target_sizes
+            )[0]
+            
+            if len(results["scores"]) > 0:
+                timestamp = f_idx / fps
+                print(f"🎯 AI Hunter: Detected '{prompt}' at {timestamp:.2f}s")
+                cap.release()
+                return timestamp
+                
+        cap.release()
+        return None

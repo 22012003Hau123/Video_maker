@@ -117,7 +117,7 @@ PlayResY: {video_format.height}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Blur, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{opts['fontname']},{opts['fontsize']},&H00FFFFFF,&H000000FF,{outline_color},{opts['backcolor']},{opts['bold']},{opts['italic']},0,0,{opts['scalex']},{opts['scaley']},0,0,1,{opts['outline']},{opts['shadow']},{opts['blur']},{alignment},{margin_l},{margin_r},{margin_v},1
+Style: Default,{opts['fontname']},{opts['fontsize']},&H00FFFFFF,&H000000FF,{outline_color},{opts['backcolor']},{opts['bold']},{opts['italic']},0,0,{opts['scalex']},{opts['scaley']},0,0,3,{opts['outline']},{opts['shadow']},{opts['blur']},{alignment},{margin_l},{margin_r},{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text

@@ -20,6 +20,10 @@ from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, Res
 from fastapi.requests import Request
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
+
+# Must run before importing queue modules (they read REDIS_URL at import time).
+load_dotenv()
+
 from src.queue.tasks import enqueue_task
 from src.queue.job_store import (
     create_job as create_job_record,
@@ -28,9 +32,6 @@ from src.queue.job_store import (
     set_job_meta as set_job_meta_record,
     get_job_meta as get_job_meta_record,
 )
-
-# Load environment variables
-load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -104,6 +105,7 @@ class ResultFile(BaseModel):
     language: str
     type: str  # "video" or "srt"
     label: str  # e.g. "English - Video", "Vietnamese - SRT"
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
 
 class JobStatus(BaseModel):
@@ -130,6 +132,28 @@ class LegalRequest(BaseModel):
     usage_type: str = "shareable"
     auto_position: bool = True
     sub_type: Optional[str] = "reels"  # stories or reels
+
+
+class GoldPlanRequest(BaseModel):
+    """Subset of the Gold POS matrix (defaults = full grid for selected VO)."""
+
+    vo: str = Field(..., description="vo1 or vo2")
+    line_ids: Optional[List[str]] = Field(
+        default=None,
+        description="Deliverable line ids; omit for all 8 lines",
+    )
+    formats: Optional[List[str]] = Field(
+        default=None,
+        description="Video format ids (e.g. 16x9); omit for all",
+    )
+    durations_seconds: Optional[List[int]] = Field(
+        default=None,
+        description="Spot lengths in seconds; omit for all",
+    )
+    export_codec_ids: Optional[List[str]] = Field(
+        default=None,
+        description="mp4_20mbps_2pass and/or prores_422; omit for both",
+    )
 
 
 # ============ Job Storage (Redis) ============
@@ -1248,6 +1272,188 @@ def process_add_packshot_job(
         update_job(job_id, status="failed", error=str(e))
 
 
+def process_gold_render_batch_job(job_id: str, payload: Dict[str, Any]):
+    """Render Burberry Gold POS batch (opening + corps + closing + WAV + overlay + subs + encode)."""
+    try:
+        import time
+
+        update_job(
+            job_id,
+            status="processing",
+            progress=2,
+            message="Starting Gold POS render batch…",
+        )
+        from pathlib import Path
+
+        from src.mastering.gold_manifest import expand_jobs
+        from src.mastering.gold_render import render_gold_job
+
+        vo = str(payload.get("vo", "vo1")).lower().strip()
+        if vo not in ("vo1", "vo2"):
+            raise ValueError("vo must be vo1 or vo2")
+
+        jobs = expand_jobs(
+            vo,
+            line_ids=payload.get("line_ids"),
+            formats=payload.get("formats"),
+            durations_seconds=payload.get("durations_seconds"),
+            export_codec_ids=payload.get("export_codec_ids"),
+        )
+        if not jobs:
+            raise ValueError("No jobs to render (empty selection)")
+
+        project_root = Path(__file__).resolve().parent
+        out_dir = OUTPUT_DIR / "gold" / job_id
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        results: List[ResultFile] = []
+        errs: List[str] = []
+        n = len(jobs)
+
+        # AI Cache for the batch (stores detected_corner, subs_vo1_20s, etc.)
+        shared_ai_data: Dict[str, Any] = {}
+
+        # Parallel FFmpeg runs (threads; each render_gold_job spawns subprocess — GIL released).
+        try:
+            max_workers = int(os.getenv("GOLD_RENDER_MAX_WORKERS", "2"))
+        except ValueError:
+            max_workers = 2
+        max_workers = max(1, min(max_workers, n, (os.cpu_count() or 4) * 2))
+
+        def _run_one(idx_spec):
+            idx, spec = idx_spec
+            t0 = time.perf_counter()
+            
+            # Progress callback for the UI
+            def _status_cb(msg: str):
+                update_job(
+                    job_id,
+                    message=f"Gold {idx + 1}/{n} · {msg} · {spec.output_basename_hint[:30]}…"
+                )
+
+            try:
+                # Pass shared_ai_data and status_callback
+                path, findings = render_gold_job(
+                    spec, project_root, out_dir, 
+                    shared_ai_data=shared_ai_data,
+                    status_callback=_status_cb
+                )
+                elapsed = time.perf_counter() - t0
+                return ("ok", spec, path, elapsed, None, findings)
+            except Exception as e:
+                elapsed = time.perf_counter() - t0
+                return ("err", spec, None, elapsed, e, {})
+
+        if max_workers <= 1 or n <= 1:
+            for i, spec in enumerate(jobs):
+                # Trước _run_one UI chỉ có "Starting…" + 2% — cập nhật để không tưởng treo
+                update_job(
+                    job_id,
+                    message=f"Gold {i + 1}/{n} starting — {spec.output_basename_hint}",
+                )
+                kind, spec, path, elapsed, err, findings = _run_one((i, spec))
+                if kind == "ok":
+                    logger.info(
+                        "Gold render %s/%s in %.1fs — %s",
+                        i + 1,
+                        n,
+                        elapsed,
+                        spec.output_basename_hint,
+                    )
+                    results.append(
+                        ResultFile(
+                            path=path,
+                            language="en",
+                            type="video",
+                            label=spec.output_basename_hint,
+                            metadata=findings,
+                        )
+                    )
+                else:
+                    logger.error("Gold render failed for %s: %s", spec.output_basename_hint, err)
+                    errs.append(f"{spec.output_basename_hint}: {err}")
+                update_job(
+                    job_id,
+                    progress=min(99, int(100 * (i + 1) / max(n, 1))),
+                    message=f"Gold {i + 1}/{n} xong · {elapsed:.0f}s · {spec.output_basename_hint[:40]}…",
+                )
+        else:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            update_job(
+                job_id,
+                message=(
+                    f"Gold batch · {max_workers} luồng / {n} file — "
+                    f"phần trăm và trạng thái sẽ cập nhật từng bước."
+                ),
+            )
+            done = 0
+            with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                # Pass (index, spec) to _run_one
+                future_map = {pool.submit(_run_one, (i, spec)): spec for i, spec in enumerate(jobs)}
+                for fut in as_completed(future_map):
+                    orig = future_map[fut]
+                    done += 1
+                    elapsed = 0.0
+                    label = orig.output_basename_hint
+                    try:
+                        kind, spec_done, path, elapsed, err, findings = fut.result()
+                        label = spec_done.output_basename_hint
+                        if kind == "ok":
+                            logger.info(
+                                "Gold parallel in %.1fs — %s",
+                                elapsed,
+                                label,
+                            )
+                            results.append(
+                                ResultFile(
+                                    path=path,
+                                    language="en",
+                                    type="video",
+                                    label=label,
+                                    metadata=findings,
+                                )
+                            )
+                        else:
+                            logger.error("Gold render failed for %s: %s", label, err)
+                            errs.append(f"{label}: {err}")
+                    except Exception as e:
+                        logger.exception("Gold future failed for %s", label)
+                        errs.append(f"{label}: {e}")
+                    update_job(
+                        job_id,
+                        progress=min(99, int(100 * done / max(n, 1))),
+                        message=f"Gold {done}/{n} xong · {max_workers} luồng · {elapsed:.0f}s · {label[:36]}…",
+                    )
+
+        if not results:
+            update_job(
+                job_id,
+                status="failed",
+                progress=100,
+                error="; ".join(errs)[:4000],
+                completed_at=datetime.now().isoformat(),
+            )
+            return
+
+        msg = f"Rendered {len(results)}/{n} files"
+        if errs:
+            msg += f" ({len(errs)} failed)"
+        update_job(
+            job_id,
+            status="completed",
+            progress=100,
+            result_files=results,
+            result_path=results[0].path if len(results) == 1 else None,
+            message=msg,
+            error="; ".join(errs)[:4000] if errs else None,
+            completed_at=datetime.now().isoformat(),
+        )
+    except Exception as e:
+        logger.exception("Gold batch job failed")
+        update_job(job_id, status="failed", error=str(e))
+
+
 def process_analyze_scenes_job(job_id: str, video_path: str):
     try:
         update_job(job_id, status="processing", progress=10, message="Starting scene analysis...")
@@ -1631,6 +1837,100 @@ async def favicon():
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+
+@app.get("/api/mastering/gold-manifest")
+async def api_mastering_gold_manifest():
+    """Burberry Gold POS manifest from src/mastering/gold_subtitles.yaml (UI + batch planning)."""
+    from src.mastering.gold_manifest import manifest_for_api
+
+    return manifest_for_api()
+
+
+@app.post("/api/mastering/gold-plan")
+async def api_mastering_gold_plan(req: GoldPlanRequest):
+    """
+    Expand selected VO / lines / formats / lengths / codecs into concrete job specs.
+    Does not render video; use for QC counts, filenames, and subtitle lines from YAML.
+    """
+    from pathlib import Path
+
+    from src.mastering.gold_manifest import (
+        expand_jobs,
+        resolve_logo_path,
+        resolve_sound_wav,
+        resolve_surimp_path,
+    )
+
+    vo = req.vo.lower().strip()
+    if vo not in ("vo1", "vo2"):
+        raise HTTPException(status_code=400, detail="vo must be vo1 or vo2")
+
+    jobs = expand_jobs(
+        vo,
+        line_ids=req.line_ids,
+        formats=req.formats,
+        durations_seconds=req.durations_seconds,
+        export_codec_ids=req.export_codec_ids,
+    )
+    project_root = Path(__file__).resolve().parent
+
+    first_assets: Optional[Dict[str, Any]] = None
+    if jobs:
+        j0 = jobs[0]
+        wav_path, wav_ok = resolve_sound_wav(j0.duration_seconds, project_root=project_root)
+        logo_path, logo_ok = resolve_logo_path(j0.video_format, project_root=project_root)
+        sur_path, sur_ok = resolve_surimp_path(
+            j0.vo, j0.layout, j0.video_format, project_root=project_root
+        )
+        first_assets = {
+            "wav": {"path": wav_path, "exists": wav_ok},
+            "logo": {"path": logo_path, "exists": logo_ok},
+            "surimp": {"path": sur_path, "exists": sur_ok},
+            "note": "Branded jobs need logo/surimp; clean jobs omit overlays. VO2 solo surimp path may be missing until assets are added.",
+        }
+
+    preview_limit = 24
+    return {
+        "vo": vo,
+        "count": len(jobs),
+        "jobs_preview": [j.to_dict() for j in jobs[:preview_limit]],
+        "preview_limit": preview_limit,
+        "truncated": len(jobs) > preview_limit,
+        "first_job_assets": first_assets,
+    }
+
+
+@app.post("/api/mastering/gold-render")
+async def api_mastering_gold_render(req: GoldPlanRequest):
+    """Queue Burberry Gold POS batch render (requires Redis RQ worker)."""
+    job_id = uuid.uuid4().hex
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    queue_name = os.getenv("QUEUE_NAME", "video_jobs")
+    create_job(
+        job_id,
+        status="pending",
+        progress=0,
+        message="Đang chờ worker RQ (0%). Nếu lâu không đổi: bật worker trong thư mục project, cùng REDIS_URL với app.",
+    )
+    enqueue_app_job(
+        "process_gold_render_batch_job",
+        job_id,
+        job_id,
+        req.model_dump(),
+    )
+    return {
+        "job_id": job_id,
+        "message": "Gold POS batch queued",
+        "poll_url": f"/api/jobs/{job_id}",
+        "worker_hint": (
+            f"Phải trùng Redis với app (xem .env). Khuyến nghị: "
+            f"python scripts/rq_worker.py — hoặc: "
+            f"rq worker {queue_name} --url {redis_url}"
+        ),
+        "redis_url": redis_url,
+        "queue_name": queue_name,
+    }
 
 
 @app.post("/api/subtitle")

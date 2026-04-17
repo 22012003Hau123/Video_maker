@@ -5,10 +5,15 @@ import asyncio
 import inspect
 import logging
 import os
+from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
 from redis import Redis
 from rq import Queue
+
+# RQ loads this file before app.py; load project .env so queue URL matches job_store / API.
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
 
 logger = logging.getLogger(__name__)
 

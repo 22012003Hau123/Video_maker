@@ -1,0 +1,191 @@
+# Burberry Gold — POS mastering manifest (sub copy + deliverable matrix)
+# Subtitles timing: align to WAV per length; copy grouped by long vs short.
+
+campaign: burberry_gold
+
+variants:
+  vo1:
+    label: VO1
+    marketing:
+      solo_duo_branded_tagline: "THE NEW PERFUME"
+  vo2:
+    label: VO2
+    marketing:
+      solo_branded_tagline: "PARFUM"
+      duo_branded_tagline: "EAU DE PARFUM AND PARFUM"
+
+# 4 formats × 5 lengths × 8 lines = 160 outputs per VO (×2 codecs = 320 files)
+formats:
+  - id: "16x9"
+    width: 1920
+    height: 1080
+  - id: "1x1"
+    width: 1080
+    height: 1080
+  - id: "4x5"
+    width: 1080
+    height: 1350
+  - id: "9x16"
+    width: 1080
+    height: 1920
+
+durations_seconds: [20, 15, 10, 6, 5]
+
+length_groups:
+  long:
+    description: "20s and 15s"
+    durations_seconds: [20, 15]
+    lines:
+      vo1:
+        - there is a lioness
+        - in all of us
+        - embrace the power within
+        - Burberry Gold
+        - the new parfum
+      vo2:
+        - there is a lioness
+        - in all of us
+        - embrace the power within
+        - Burberry Gold
+
+  short:
+    description: "10s, 6s and 5s"
+    durations_seconds: [10, 6, 5]
+    lines:
+      vo1:
+        - Burberry Gold
+        - the new parfum
+      vo2:
+        - Burberry Gold
+
+# Eight “lines” per VO: 4 product modes × with/without subtitles = 160 videos per VO per codec
+deliverable_lines:
+  vo1:
+    - id: solo_branded_sub
+      label: "Solo branded + logo/tagline (THE NEW PERFUME) + subtitles"
+      layout: solo
+      branded: true
+      subtitles: true
+    - id: solo_branded_nosub
+      label: "Solo branded + logo/tagline (THE NEW PERFUME) without subtitles"
+      layout: solo
+      branded: true
+      subtitles: false
+    - id: solo_clean_sub
+      label: "Solo clean (packshot, no logo/tagline) + subtitles"
+      layout: solo
+      branded: false
+      subtitles: true
+    - id: solo_clean_nosub
+      label: "Solo clean (packshot, no logo/tagline) without subtitles"
+      layout: solo
+      branded: false
+      subtitles: false
+    - id: duo_branded_sub
+      label: "Duo + tagline (THE NEW PERFUME) + subtitles"
+      layout: duo
+      branded: true
+      subtitles: true
+    - id: duo_branded_nosub
+      label: "Duo + tagline (THE NEW PERFUME) without subtitles"
+      layout: duo
+      branded: true
+      subtitles: false
+    - id: duo_clean_sub
+      label: "Duo clean (packshot, no logo/tagline) + subtitles"
+      layout: duo
+      branded: false
+      subtitles: true
+    - id: duo_clean_nosub
+      label: "Duo clean (packshot, no logo/tagline) without subtitles"
+      layout: duo
+      branded: false
+      subtitles: false
+
+  vo2:
+    - id: solo_branded_sub
+      label: "Solo branded + logo/tagline (PARFUM) + subtitles"
+      layout: solo
+      branded: true
+      subtitles: true
+    - id: solo_branded_nosub
+      label: "Solo branded + logo/tagline (PARFUM) without subtitles"
+      layout: solo
+      branded: true
+      subtitles: false
+    - id: solo_clean_sub
+      label: "Solo clean (packshot, no logo/tagline) + subtitles"
+      layout: solo
+      branded: false
+      subtitles: true
+    - id: solo_clean_nosub
+      label: "Solo clean (packshot, no logo/tagline) without subtitles"
+      layout: solo
+      branded: false
+      subtitles: false
+    - id: duo_branded_sub
+      label: "Duo branded + tagline (EAU DE PARFUM AND PARFUM) + subtitles"
+      layout: duo
+      branded: true
+      subtitles: true
+    - id: duo_branded_nosub
+      label: "Duo branded + tagline (EAU DE PARFUM AND PARFUM) without subtitles"
+      layout: duo
+      branded: true
+      subtitles: false
+    - id: duo_clean_sub
+      label: "Duo clean (packshot, no logo/tagline) + subtitles"
+      layout: duo
+      branded: false
+      subtitles: true
+    - id: duo_clean_nosub
+      label: "Duo clean (packshot, no logo/tagline) without subtitles"
+      layout: duo
+      branded: false
+      subtitles: false
+
+# Assembly: corps = segment from full_video; durations follow WAV (master clock).
+assembly:
+  full_video_corps_start_seconds: 7.04
+  # If true and solo closing missing, use duo closing (replace when solo packshot exists).
+  closing_solo_fallback_to_duo: true
+  # Readiness/UI: solo lines require a dedicated solo closing file. Set true only if dùng tạm cùng file duo.
+  allow_solo_closing_same_as_duo: true
+  # When target duration < opening+closing, skip 3-part concat and take one trim from full_video (short spots).
+  single_segment_when_shorter_than_open_close: true
+
+# Optional: repo-relative paths for automation (override per env if needed)
+asset_paths:
+  opening:
+    default: "src/mastering/opening/BURBERRY GODDESS INTENSE -opening.mp4"
+  closing:
+    solo:
+      "16x9": "src/mastering/closing/duo/Closing_Duel_HD_ProRes444XQ_25fps_16x9.mov"
+    duo:
+      "16x9": "src/mastering/closing/duo/Closing_Duel_HD_ProRes444XQ_25fps_16x9.mov"
+  full_video:
+    default: "src/mastering/full_video/BURBERRY GODDESS INTENSE - full.mp4"
+  sound_wav:
+    pattern: "src/mastering/sound/16-01-25 Burberry Gold EDPI {duration}s Internet Full Mix - New Perfum.wav"
+  logo_png:
+    pattern: "src/mastering/logo_tagline/logo/BURBERRY BEAUTY_CMD_DIGITAL_GOLD_TITLES_Burberry Gold_White_{format}.png"
+  surimps:
+    vo1:
+      pattern: "src/mastering/logo_tagline/surimps/VO1/BURBERRY BEAUTY_CMD_DIGITAL_GOLD PARFUM_TITLES_Gold_Parfum_Tagline_1_{format}.png"
+    vo2_solo:
+      # Add Tagline_2 assets under VO2/solo/ when delivered; until then resolve_surimp_path may warn.
+      pattern: "src/mastering/logo_tagline/surimps/VO2/solo/BURBERRY BEAUTY_CMD_DIGITAL_GOLD PARFUM_TITLES_Gold_Parfum_Tagline_2_{format}.png"
+    vo2_duo:
+      pattern: "src/mastering/logo_tagline/surimps/VO2/duo/BURBERRY BEAUTY_CMD_DIGITAL_GOLD PARFUM_TITLES_Gold_Parfum_Tagline_3_{format}.png"
+
+# Export targets (UI / encoder)
+export_codecs:
+  - id: mp4_h264_1pass_draft
+    label: "MP4 H.264 1-pass nháp (nhanh, xem thử)"
+    extension: ".mp4"
+  - id: mp4_20mbps_2pass
+    label: "MP4 H.264 VBR 2-pass ~20 Mbps"
+    extension: ".mp4"
+  - id: prores_422
+    label: "MOV ProRes 422"
+    extension: ".mov"
