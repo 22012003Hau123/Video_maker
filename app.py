@@ -884,7 +884,7 @@ async def process_subtitles(
         
         # 2. Whisper transcribe
         update_job(job_id, progress=20, message="AI is transcribing speech (Whisper)...")
-        transcript, source_lang = sync.transcribe(audio_path, source_lang, prompt=WHISPER_PROMPT)
+        transcript, source_lang, _ = sync.transcribe(audio_path, source_lang, prompt=WHISPER_PROMPT)
         
         if not transcript:
             raise ValueError("Không nhận diện được lời thoại trong video")
@@ -1663,7 +1663,7 @@ def process_subtitle_batch_job(
         try:
             audio_path = extract_audio(str(video_path))
             update_job(job_id, progress=30)
-            transcript, source_lang = sync.transcribe(audio_path, source_lang)
+            transcript, source_lang, _ = sync.transcribe(audio_path, source_lang)
             aligned = sync.align_subtitles(subtitle_lines, transcript)
         except Exception as e:
             logger.warning(f"Timing failed: {e}, using fallback")
@@ -1755,7 +1755,7 @@ def process_subtitle_export_job(
         try:
             audio_path = extract_audio(str(video_path))
             update_job(job_id, progress=40, message="Aligning subtitle timing...")
-            transcript, language = sync.transcribe(audio_path, language)
+            transcript, language, _ = sync.transcribe(audio_path, language)
             aligned = sync.align_subtitles(subtitle_lines, transcript)
         except Exception as e:
             logger.warning(f"Timing failed: {e}, using fallback")
@@ -2036,7 +2036,7 @@ async def process_subtitles_from_text(
             update_job(job_id, progress=35, message="AI is analyzing audio...")
             
             # Dùng Whisper transcribe để lấy timing
-            transcript, source_lang = sync.transcribe(audio_path, source_lang, prompt=WHISPER_PROMPT)
+            transcript, source_lang, _ = sync.transcribe(audio_path, source_lang, prompt=WHISPER_PROMPT)
             update_job(job_id, progress=55, message="AI is aligning text with speech rhythm...")
             
             if auto_segment_rhythm and raw_text:
