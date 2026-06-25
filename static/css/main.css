@@ -76,6 +76,21 @@ html, body {
     text-transform: uppercase;
 }
 .navbar-actions { display: flex; align-items: center; gap: 0.75rem; }
+.lang-toggle-btn {
+    background: none;
+    border: 1px solid var(--border-hi);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 0.2rem 0.55rem;
+    cursor: pointer;
+    font-size: 0.72rem;
+    font-family: inherit;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    transition: border-color 0.15s, color 0.15s;
+    white-space: nowrap;
+}
+.lang-toggle-btn:hover { border-color: var(--primary); color: var(--primary); }
 
 /* ── WORKSPACE ───────────────────────────────────────────── */
 .workspace {

@@ -14,11 +14,12 @@
 <nav class="navbar">
     <div class="navbar-logo">
         <i class="ph ph-film-slate"></i>
-        Video Subtitles Automation
+        <span data-i18n="app.title">Video Subtitles Automation</span>
     </div>
-    <div class="navbar-mode" id="navbar-mode-label">Subtitle Pipeline</div>
+    <div class="navbar-mode" id="navbar-mode-label" data-i18n-mode="subtitle">Subtitle Pipeline</div>
     <div class="navbar-actions">
         <span id="worker-badge"></span>
+        <button id="lang-toggle" onclick="toggleLang()" class="lang-toggle-btn">🇫🇷 FR</button>
     </div>
 </nav>
 
@@ -29,15 +30,15 @@
     <aside class="sidebar">
         <button class="sidebar-btn active" id="sb-subtitle" onclick="switchMode('subtitle')">
             <i class="ph ph-closed-captioning"></i>
-            <span>Sub</span>
+            <span data-i18n="sidebar.sub">Sub</span>
         </button>
         <button class="sidebar-btn" id="sb-legal" onclick="switchMode('legal')">
             <i class="ph ph-scales"></i>
-            <span>Legal</span>
+            <span data-i18n="sidebar.legal">Legal</span>
         </button>
         <button class="sidebar-btn" id="sb-master" onclick="switchMode('master')">
             <i class="ph ph-magic-wand"></i>
-            <span>Master</span>
+            <span data-i18n="sidebar.master">Master</span>
         </button>
     </aside>
 
@@ -48,7 +49,7 @@
             <img id="main-preview-img" alt="Preview">
             <div class="preview-placeholder" id="main-preview-placeholder">
                 <i class="ph ph-film-strip"></i>
-                <p>Upload a video to preview</p>
+                <p data-i18n="preview.placeholder">Upload a video to preview</p>
             </div>
             <!-- Live subtitle preview overlay -->
             <div id="sub-preview-overlay" style="display:none; position:absolute; left:0; right:0; bottom:0; text-align:center; pointer-events:none; padding:0 4%;">
@@ -66,26 +67,26 @@
                 <form id="subtitle-form" onsubmit="submitSubtitle(event)">
 
                     <!-- Upload Zone -->
-                    <div class="section-label">Source Video</div>
+                    <div class="section-label" data-i18n="sub.source_video">Source Video</div>
                     <label class="upload-zone" id="video-upload-1">
                         <input type="file" name="video" accept="video/*"
                                onchange="handleFileSelect(this,'video-upload-1'); updatePreview(this);">
                         <i class="ph ph-video-camera upload-icon"></i>
-                        <div class="upload-title">Drop video or click to browse</div>
+                        <div class="upload-title" data-i18n="upload.drop_video">Drop video or click to browse</div>
                         <div class="upload-sub">MP4 · MOV · AVI · MKV</div>
                         <div class="upload-filename" style="display:none"></div>
                     </label>
 
                     <!-- Subtitle Mode Toggle -->
-                    <div class="section-label" style="margin-top:0.25rem;">Subtitle Mode</div>
+                    <div class="section-label" style="margin-top:0.25rem;" data-i18n="sub.mode_label">Subtitle Mode</div>
                     <div class="toggle-tabs">
                         <button type="button" class="toggle-tab active" id="tab-auto"
                                 onclick="switchInputMode('auto')">
-                            <i class="ph ph-robot"></i> Auto AI
+                            <i class="ph ph-robot"></i> <span data-i18n="sub.auto_ai">Auto AI</span>
                         </button>
                         <button type="button" class="toggle-tab" id="tab-text"
                                 onclick="switchInputMode('text')">
-                            <i class="ph ph-table"></i> Excel Import
+                            <i class="ph ph-table"></i> <span data-i18n="sub.excel_import">Excel Import</span>
                         </button>
                     </div>
 
@@ -93,7 +94,7 @@
                     <div id="auto-input" class="input-content active">
                         <div class="info-box">
                             <i class="ph ph-robot"></i>
-                            AI automatically generates subtitles from your video audio via Whisper.
+                            <span data-i18n="sub.ai_desc">AI automatically generates subtitles from your video audio via Whisper.</span>
                         </div>
                     </div>
 
@@ -105,7 +106,7 @@
                                    accept=".xlsx,.xls,.csv" style="display:none;"
                                    onchange="handleTranslationExcel(this)">
                             <i class="ph ph-file-xls upload-icon" style="color:var(--success);"></i>
-                            <div class="upload-title">Upload Translation Excel / CSV</div>
+                            <div class="upload-title" data-i18n="sub.upload_excel">Upload Translation Excel / CSV</div>
                             <div class="upload-sub">.xlsx · .xls · .csv</div>
                         </div>
 
@@ -127,9 +128,9 @@
                             </table>
                             <div style="padding:0.6rem 0.75rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:var(--panel);">
                                 <button type="button" class="btn btn-ghost btn-sm" onclick="addTranslationRow()">
-                                    <i class="ph ph-plus"></i> Add Row
+                                    <i class="ph ph-plus"></i> <span data-i18n="sub.add_row">Add Row</span>
                                 </button>
-                                <span style="font-size:0.7rem;color:var(--text-muted);">Cells are editable</span>
+                                <span style="font-size:0.7rem;color:var(--text-muted);" data-i18n="sub.cells_editable">Cells are editable</span>
                             </div>
                         </div>
                         <input type="hidden" name="subtitle_text" id="subtitle-textarea">
@@ -138,7 +139,7 @@
                     <!-- Settings (collapsible) -->
                     <div>
                         <div class="collapse-header" id="sub-settings-hdr" onclick="toggleCollapse('sub-settings-hdr','sub-settings-body')">
-                            <span><i class="ph ph-gear-six"></i> Advanced Settings</span>
+                            <span><i class="ph ph-gear-six"></i> <span data-i18n="sub.advanced">Advanced Settings</span></span>
                             <i class="ph ph-caret-right caret"></i>
                         </div>
                         <div class="collapse-body" id="sub-settings-body">
@@ -148,7 +149,7 @@
 
                             <!-- Target Languages -->
                             <div class="field" id="target-language-group">
-                                <label>Translate to</label>
+                                <label data-i18n="sub.translate_to">Translate to</label>
                                 <div class="lang-grid">
                                     <label class="lang-chip"><input type="checkbox" name="lang_fr" value="fr" checked> 🇫🇷 FR</label>
                                     <label class="lang-chip"><input type="checkbox" name="lang_es" value="es" checked> 🇪🇸 ES</label>
@@ -164,15 +165,15 @@
                             <!-- Live Preview Toggle -->
                             <label class="lang-chip" style="width:100%;justify-content:center;padding:0.4rem;" id="sub-preview-toggle">
                                 <input type="checkbox" id="sub-preview-enabled" onchange="toggleSubPreview(this.checked)">
-                                <i class="ph ph-eye"></i> Live preview subtitle
+                                <i class="ph ph-eye"></i> <span data-i18n="sub.live_preview">Live preview subtitle</span>
                             </label>
 
                             <!-- Font Family -->
                             <div class="field">
-                                <label>Font chữ</label>
+                                <label data-i18n="sub.font">Font</label>
                                 <div style="display:flex;gap:0.4rem;align-items:center;">
                                     <select name="font_family" id="font-family-select" style="flex:1;" onchange="updateSubPreview()">
-                                        <option value="">Default (Helvetica)</option>
+                                        <option value="" data-i18n="sub.font_default">Default (Helvetica)</option>
                                     </select>
                                     <label class="btn btn-ghost" style="cursor:pointer;padding:0.45rem 0.65rem;font-size:0.78rem;" title="Upload font (.ttf/.otf)">
                                         <i class="ph ph-upload-simple"></i>
@@ -184,23 +185,23 @@
                             <!-- Font Size + Position -->
                             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
                                 <div class="field">
-                                    <label>Cỡ chữ <span id="font-size-val" style="color:var(--primary);font-weight:700;">48</span>px</label>
+                                    <label><span data-i18n="sub.font_size">Font size</span> <span id="font-size-val" style="color:var(--primary);font-weight:700;">48</span>px</label>
                                     <input type="range" id="sub-font-size" name="font_size" min="24" max="120" value="48" step="2" oninput="document.getElementById('font-size-val').textContent=this.value; updateSubPreview();">
                                 </div>
                                 <div class="field">
-                                    <label>Vị trí <span id="margin-v-val" style="color:var(--primary);font-weight:700;">30</span>px</label>
+                                    <label><span data-i18n="sub.position">Position</span> <span id="margin-v-val" style="color:var(--primary);font-weight:700;">30</span>px</label>
                                     <input type="range" id="sub-margin-v" name="margin_v" min="0" max="300" value="30" step="5" oninput="document.getElementById('margin-v-val').textContent=this.value; updateSubPreview();">
                                 </div>
                             </div>
 
                             <!-- Export Format -->
                             <div class="field">
-                                <label>Output Preset</label>
+                                <label data-i18n="sub.output_preset">Output Preset</label>
                                 <select name="export_format" onchange="updateFormatInfo(this.value)">
-                                    <option value="mp4_standard">🌐 Standard MP4 (H.264)</option>
-                                    <option value="prores">🎬 ProRes 422 (.MOV)</option>
-                                    <option value="mp4_20mbps">🚀 High Bitrate 20Mbps</option>
-                                    <option value="ae_package">🧩 AE Package (ProRes+WAV+SRT+JSON)</option>
+                                    <option value="mp4_standard" data-i18n="sub.fmt.standard">🌐 Standard MP4 (H.264)</option>
+                                    <option value="prores" data-i18n="sub.fmt.prores">🎬 ProRes 422 (.MOV)</option>
+                                    <option value="mp4_20mbps" data-i18n="sub.fmt.highbitrate">🚀 High Bitrate 20Mbps</option>
+                                    <option value="ae_package" data-i18n="sub.fmt.ae">🧩 AE Package (ProRes+WAV+SRT+JSON)</option>
                                 </select>
                                 <div id="format-info-box" class="info-box" style="margin-top:0.35rem;">
                                     <i class="ph ph-info"></i>
@@ -215,7 +216,7 @@
 
                     <!-- Submit (inside form, but visually at the bottom via controls-footer injected) -->
                     <button type="submit" class="btn btn-primary" id="subtitle-submit">
-                        <i class="ph ph-rocket-launch"></i> Generate Subtitles
+                        <i class="ph ph-rocket-launch"></i> <span data-i18n="sub.generate">Generate Subtitles</span>
                     </button>
 
                 </form>
@@ -225,21 +226,21 @@
             <div class="mode-panel" id="panel-legal">
                 <form id="legal-form" onsubmit="submitLegal(event)">
 
-                    <div class="section-label">Source Video</div>
+                    <div class="section-label" data-i18n="sub.source_video">Source Video</div>
                     <label class="upload-zone" id="video-upload-2">
                         <input type="file" name="video" accept="video/*"
                                onchange="handleFileSelect(this,'video-upload-2')">
                         <i class="ph ph-video-camera upload-icon"></i>
-                        <div class="upload-title">Drop video or click to browse</div>
+                        <div class="upload-title" data-i18n="upload.drop_video">Drop video or click to browse</div>
                         <div class="upload-sub">MP4 · MOV · AVI · MKV</div>
                         <div class="upload-filename" style="display:none"></div>
                     </label>
 
-                    <div class="section-label" style="margin-top:0.25rem;">Legal Options</div>
+                    <div class="section-label" style="margin-top:0.25rem;" data-i18n="legal.options">Legal Options</div>
 
                     <div class="grid-3">
                         <div class="field">
-                            <label>Country</label>
+                            <label data-i18n="legal.country">Country</label>
                             <select name="country_code">
                                 <option value="DE">🇩🇪 Germany</option>
                                 <option value="UK">🇬🇧 UK</option>
@@ -248,34 +249,34 @@
                             </select>
                         </div>
                         <div class="field">
-                            <label>Media Type</label>
+                            <label data-i18n="legal.media_type">Media Type</label>
                             <select name="media_type">
-                                <option value="social">Social Media</option>
-                                <option value="tv">TV / Broadcast</option>
+                                <option value="social" data-i18n="legal.social">Social Media</option>
+                                <option value="tv" data-i18n="legal.tv">TV / Broadcast</option>
                             </select>
                         </div>
                         <div class="field">
-                            <label>Usage Type</label>
+                            <label data-i18n="legal.usage_type">Usage Type</label>
                             <select name="usage_type">
-                                <option value="shareable">Shareable</option>
-                                <option value="non_shareable">Non-Shareable</option>
+                                <option value="shareable" data-i18n="legal.shareable">Shareable</option>
+                                <option value="non_shareable" data-i18n="legal.non_shareable">Non-Shareable</option>
                             </select>
                         </div>
                     </div>
 
                     <div class="grid-2" style="margin-top:0.25rem;">
                         <div class="field" id="legal-subtype-group">
-                            <label>Post Type (9:16)</label>
+                            <label data-i18n="legal.post_type">Post Type (9:16)</label>
                             <select name="sub_type">
                                 <option value="reels">Reels</option>
                                 <option value="stories">Stories</option>
                             </select>
                         </div>
                         <div class="field">
-                            <label>Output Format</label>
+                            <label data-i18n="legal.output_format">Output Format</label>
                             <select name="export_format">
-                                <option value="legal_video">Legal Preview Video</option>
-                                <option value="ae_package">🧩 Legal AE Package</option>
+                                <option value="legal_video" data-i18n="legal.legal_preview">Legal Preview Video</option>
+                                <option value="ae_package" data-i18n="legal.ae_package">🧩 Legal AE Package</option>
                             </select>
                         </div>
                     </div>
@@ -284,7 +285,7 @@
                     <div id="legal-status" style="display:none;"></div>
 
                     <button type="submit" class="btn btn-primary" id="legal-submit">
-                        <i class="ph ph-gavel"></i> Add Legal Content
+                        <i class="ph ph-gavel"></i> <span data-i18n="legal.submit">Add Legal Content</span>
                     </button>
 
                 </form>
@@ -297,11 +298,11 @@
                 <div style="display:flex;gap:0.4rem;">
                     <button type="button" class="master-subtab active" id="master-subtab-gold"
                             onclick="switchMasterSubtab('gold')">
-                        <i class="ph ph-storefront"></i> Gold POS
+                        <i class="ph ph-storefront"></i> <span data-i18n="master.gold_pos">Gold POS</span>
                     </button>
                     <button type="button" class="master-subtab" id="master-subtab-ai"
                             onclick="switchMasterSubtab('ai')">
-                        <i class="ph ph-video-camera"></i> Scene AI
+                        <i class="ph ph-video-camera"></i> <span data-i18n="master.scene_ai">Scene AI</span>
                     </button>
                 </div>
 
@@ -309,17 +310,17 @@
                 <div id="master-subpanel-gold" class="master-subpanel active">
                     <div class="grid-2">
                         <div class="field">
-                            <label>Version (VO)</label>
+                            <label data-i18n="master.version">Version (VO)</label>
                             <select id="gold-vo" onchange="goldOnVoChange()">
                                 <option value="vo1">VO1</option>
                                 <option value="vo2">VO2</option>
                             </select>
                         </div>
                         <div class="field">
-                            <label>Matrix</label>
+                            <label data-i18n="master.matrix">Matrix</label>
                             <div id="gold-matrix-hint"
                                  style="font-size:0.75rem;color:var(--text-muted);padding:0.5rem;background:var(--panel-light);border-radius:8px;border:1px solid var(--border);">
-                                Loading…
+                                <span data-i18n="master.loading">Loading…</span>
                             </div>
                         </div>
                     </div>
@@ -327,7 +328,7 @@
                     <div id="gold-asset-banner" style="display:none;font-size:0.78rem;padding:0.55rem 0.75rem;border-radius:var(--radius);"></div>
 
                     <div class="field">
-                        <label>Deliverable Lines</label>
+                        <label data-i18n="master.deliverable">Deliverable Lines</label>
                         <div id="gold-lines-wrap"
                              style="display:flex;flex-direction:column;gap:0.3rem;max-height:200px;overflow:auto;padding:0.4rem;background:var(--panel-light);border-radius:var(--radius);border:1px solid var(--border);font-size:0.8rem;">
                         </div>
@@ -335,15 +336,15 @@
 
                     <div class="grid-3">
                         <div class="field">
-                            <label>Formats</label>
+                            <label data-i18n="master.formats">Formats</label>
                             <div id="gold-formats-wrap" style="display:flex;flex-wrap:wrap;gap:0.3rem;"></div>
                         </div>
                         <div class="field">
-                            <label>Lengths (s)</label>
+                            <label data-i18n="master.lengths">Lengths (s)</label>
                             <div id="gold-durations-wrap" style="display:flex;flex-wrap:wrap;gap:0.3rem;"></div>
                         </div>
                         <div class="field">
-                            <label>Codecs</label>
+                            <label data-i18n="master.codecs">Codecs</label>
                             <div id="gold-codecs-wrap" style="display:flex;flex-wrap:wrap;gap:0.3rem;"></div>
                         </div>
                     </div>
@@ -351,12 +352,12 @@
                     <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
                         <button type="button" class="btn btn-ghost btn-sm" id="gold-plan-btn"
                                 onclick="submitGoldPlan()" style="flex:1;">
-                            <i class="ph ph-list-checks"></i> Preview Plan
+                            <i class="ph ph-list-checks"></i> <span data-i18n="master.preview_plan">Preview Plan</span>
                         </button>
                         <button type="button" class="btn btn-sm" id="gold-render-btn"
                                 onclick="submitGoldRender()"
                                 style="flex:1;background:var(--success);color:#fff;">
-                            <i class="ph ph-play"></i> Queue Render
+                            <i class="ph ph-play"></i> <span data-i18n="master.queue_render">Queue Render</span>
                         </button>
                     </div>
 
@@ -370,12 +371,12 @@
                 <!-- Scene AI Panel -->
                 <div id="master-subpanel-ai" class="master-subpanel">
 
-                    <div class="section-label">Source Video</div>
+                    <div class="section-label" data-i18n="sub.source_video">Source Video</div>
                     <label class="upload-zone" id="video-upload-3">
                         <input type="file" id="master-video-input" accept="video/*"
                                onchange="handleFileSelect(this,'video-upload-3'); updateMasterPreview(this);">
                         <i class="ph ph-video-camera upload-icon"></i>
-                        <div class="upload-title">Drop video or click to browse</div>
+                        <div class="upload-title" data-i18n="upload.drop_video">Drop video or click to browse</div>
                         <div class="upload-sub">MP4 · MOV · AVI · MKV</div>
                         <div class="upload-filename" style="display:none"></div>
                     </label>
@@ -383,11 +384,11 @@
                     <!-- Scene Analysis -->
                     <div class="tool-card">
                         <div class="tool-card-header">
-                            <i class="ph ph-scan"></i> Scene Analysis
+                            <i class="ph ph-scan"></i> <span data-i18n="master.scene_analysis">Scene Analysis</span>
                         </div>
                         <button type="button" class="btn btn-ghost btn-sm" id="btn-analyze"
                                 onclick="analyzeScenes()" style="width:100%;">
-                            <i class="ph ph-scan"></i> Analyze Scenes
+                            <i class="ph ph-scan"></i> <span data-i18n="master.analyze_scenes">Analyze Scenes</span>
                         </button>
                         <div id="scene-results" style="display:none;">
                             <div id="scene-timeline" style="display:flex;gap:0.4rem;overflow-x:auto;padding:0.3rem 0;"></div>
@@ -397,17 +398,17 @@
                     <!-- Smart Cut -->
                     <div class="tool-card">
                         <div class="tool-card-header">
-                            <i class="ph ph-scissors"></i> Smart Cut
+                            <i class="ph ph-scissors"></i> <span data-i18n="master.smart_cut">Smart Cut</span>
                         </div>
                         <div class="grid-2">
-                            <label class="checkbox-label"><input type="checkbox" id="sc-intro" checked> Remove Intro</label>
-                            <label class="checkbox-label"><input type="checkbox" id="sc-outro" checked> Remove Outro</label>
-                            <label class="checkbox-label"><input type="checkbox" id="sc-logo"> Remove Logo</label>
-                            <label class="checkbox-label"><input type="checkbox" id="sc-product"> Remove Product</label>
+                            <label class="checkbox-label"><input type="checkbox" id="sc-intro" checked> <span data-i18n="master.remove_intro">Remove Intro</span></label>
+                            <label class="checkbox-label"><input type="checkbox" id="sc-outro" checked> <span data-i18n="master.remove_outro">Remove Outro</span></label>
+                            <label class="checkbox-label"><input type="checkbox" id="sc-logo"> <span data-i18n="master.remove_logo">Remove Logo</span></label>
+                            <label class="checkbox-label"><input type="checkbox" id="sc-product"> <span data-i18n="master.remove_product">Remove Product</span></label>
                         </div>
                         <button type="button" class="btn btn-ghost btn-sm" id="btn-smartcut"
                                 onclick="smartCut()" disabled style="width:100%;">
-                            <i class="ph ph-scissors"></i> Smart Cut
+                            <i class="ph ph-scissors"></i> <span data-i18n="master.smart_cut">Smart Cut</span>
                         </button>
                         <div id="status-smartcut" class="card-status"></div>
                     </div>
@@ -415,11 +416,11 @@
                     <!-- Logo Remove -->
                     <div class="tool-card">
                         <div class="tool-card-header">
-                            <i class="ph ph-eraser"></i> Logo Removal
+                            <i class="ph ph-eraser"></i> <span data-i18n="master.logo_removal">Logo Removal</span>
                         </div>
                         <button type="button" class="btn btn-ghost btn-sm" id="btn-logo-remove"
                                 onclick="logoRemove()" disabled style="width:100%;">
-                            <i class="ph ph-eraser"></i> Remove Logo (AI)
+                            <i class="ph ph-eraser"></i> <span data-i18n="master.remove_logo_ai">Remove Logo (AI)</span>
                         </button>
                         <div id="status-logo" class="card-status"></div>
                     </div>
@@ -427,43 +428,43 @@
                     <!-- Logo Replace -->
                     <div class="tool-card">
                         <div class="tool-card-header">
-                            <i class="ph ph-image"></i> Logo Replace
+                            <i class="ph ph-image"></i> <span data-i18n="master.logo_replace">Logo Replace</span>
                         </div>
                         <label class="upload-zone" id="logo-upload-zone" style="min-height:60px;">
                             <input type="file" id="logo-input" accept="image/*">
                             <i class="ph ph-image upload-icon" style="font-size:1.2rem;"></i>
-                            <div class="upload-sub">Upload new logo</div>
+                            <div class="upload-sub" data-i18n="master.upload_logo">Upload new logo</div>
                         </label>
                         <button type="button" class="btn btn-ghost btn-sm" id="btn-replace-logo"
                                 onclick="replaceLogo()" style="width:100%;">
-                            <i class="ph ph-arrows-clockwise"></i> Replace Logo
+                            <i class="ph ph-arrows-clockwise"></i> <span data-i18n="master.replace_logo">Replace Logo</span>
                         </button>
                     </div>
 
                     <!-- Packshot -->
                     <div class="tool-card">
                         <div class="tool-card-header">
-                            <i class="ph ph-package"></i> Add Packshot
+                            <i class="ph ph-package"></i> <span data-i18n="master.add_packshot">Add Packshot</span>
                         </div>
                         <label class="upload-zone" style="min-height:60px;">
                             <input type="file" id="packshot-input" accept="image/*">
                             <i class="ph ph-package upload-icon" style="font-size:1.2rem;"></i>
-                            <div class="upload-sub">Upload packshot image</div>
+                            <div class="upload-sub" data-i18n="master.upload_packshot">Upload packshot image</div>
                         </label>
                         <button type="button" class="btn btn-ghost btn-sm" id="btn-packshot"
                                 onclick="addPackshot()" style="width:100%;">
-                            <i class="ph ph-plus-circle"></i> Add Packshot
+                            <i class="ph ph-plus-circle"></i> <span data-i18n="master.add_packshot">Add Packshot</span>
                         </button>
                     </div>
 
                     <!-- Object Removal Modal Trigger -->
                     <div class="tool-card">
                         <div class="tool-card-header">
-                            <i class="ph ph-paint-brush"></i> Object Removal (LaMa AI)
+                            <i class="ph ph-paint-brush"></i> <span data-i18n="master.object_removal">Object Removal (LaMa AI)</span>
                         </div>
                         <button type="button" class="btn btn-ghost btn-sm"
                                 onclick="openModal('modal-inpaint')" style="width:100%;">
-                            <i class="ph ph-paint-brush"></i> Open Inpaint Tool
+                            <i class="ph ph-paint-brush"></i> <span data-i18n="master.open_inpaint">Open Inpaint Tool</span>
                         </button>
                     </div>
 
@@ -477,7 +478,7 @@
 
 <!-- ══ STATUS BAR ═══════════════════════════════════════════ -->
 <footer class="statusbar">
-    <div class="statusbar-label" id="statusbar-label">Ready</div>
+    <div class="statusbar-label" id="statusbar-label" data-i18n="status.ready">Ready</div>
     <div class="statusbar-progress">
         <div class="fill" id="statusbar-fill" style="width:0%"></div>
     </div>

@@ -4,6 +4,193 @@
 
 'use strict';
 
+// ── I18N ─────────────────────────────────────────────────────
+const I18N = {
+    en: {
+        'app.title':           'Video Subtitles Automation',
+        'sidebar.sub':         'Sub',
+        'sidebar.legal':       'Legal',
+        'sidebar.master':      'Master',
+        'preview.placeholder': 'Upload a video to preview',
+        'sub.source_video':    'Source Video',
+        'upload.drop_video':   'Drop video or click to browse',
+        'sub.mode_label':      'Subtitle Mode',
+        'sub.auto_ai':         'Auto AI',
+        'sub.excel_import':    'Excel Import',
+        'sub.ai_desc':         'AI automatically generates subtitles from your video audio via Whisper.',
+        'sub.upload_excel':    'Upload Translation Excel / CSV',
+        'sub.add_row':         'Add Row',
+        'sub.cells_editable':  'Cells are editable',
+        'sub.advanced':        'Advanced Settings',
+        'sub.translate_to':    'Translate to',
+        'sub.live_preview':    'Live preview subtitle',
+        'sub.font':            'Font',
+        'sub.font_size':       'Font size',
+        'sub.position':        'Position',
+        'sub.output_preset':   'Output Preset',
+        'sub.fmt.standard':    '🌐 Standard MP4 (H.264)',
+        'sub.fmt.prores':      '🎬 ProRes 422 (.MOV)',
+        'sub.fmt.highbitrate': '🚀 High Bitrate 20Mbps',
+        'sub.fmt.ae':          '🧩 AE Package (ProRes+WAV+SRT+JSON)',
+        'sub.info.standard':   'Ideal for web sharing and general review.',
+        'sub.info.prores':     'High quality for post-production and editing.',
+        'sub.info.highbitrate':'High bitrate for broadcast or archive use.',
+        'sub.info.ae':         'Full asset bundle for After Effects workflow.',
+        'sub.font_default':    'Default (Helvetica)',
+        'sub.generate':        'Generate Subtitles',
+        'legal.options':       'Legal Options',
+        'legal.country':       'Country',
+        'legal.media_type':    'Media Type',
+        'legal.social':        'Social Media',
+        'legal.tv':            'TV / Broadcast',
+        'legal.usage_type':    'Usage Type',
+        'legal.shareable':     'Shareable',
+        'legal.non_shareable': 'Non-Shareable',
+        'legal.post_type':     'Post Type (9:16)',
+        'legal.output_format': 'Output Format',
+        'legal.legal_preview': 'Legal Preview Video',
+        'legal.ae_package':    '🧩 Legal AE Package',
+        'legal.submit':        'Add Legal Content',
+        'master.gold_pos':     'Gold POS',
+        'master.scene_ai':     'Scene AI',
+        'master.version':      'Version (VO)',
+        'master.matrix':       'Matrix',
+        'master.loading':      'Loading…',
+        'master.deliverable':  'Deliverable Lines',
+        'master.formats':      'Formats',
+        'master.lengths':      'Lengths (s)',
+        'master.codecs':       'Codecs',
+        'master.preview_plan': 'Preview Plan',
+        'master.queue_render': 'Queue Render',
+        'master.scene_analysis': 'Scene Analysis',
+        'master.analyze_scenes': 'Analyze Scenes',
+        'master.smart_cut':    'Smart Cut',
+        'master.remove_intro': 'Remove Intro',
+        'master.remove_outro': 'Remove Outro',
+        'master.remove_logo':  'Remove Logo',
+        'master.remove_product': 'Remove Product',
+        'master.logo_removal': 'Logo Removal',
+        'master.remove_logo_ai': 'Remove Logo (AI)',
+        'master.logo_replace': 'Logo Replace',
+        'master.upload_logo':  'Upload new logo',
+        'master.replace_logo': 'Replace Logo',
+        'master.add_packshot': 'Add Packshot',
+        'master.upload_packshot': 'Upload packshot image',
+        'master.object_removal': 'Object Removal (LaMa AI)',
+        'master.open_inpaint': 'Open Inpaint Tool',
+        'status.ready':        'Ready',
+        'mode.subtitle':       'Subtitle Pipeline',
+        'mode.legal':          'Legal Pipeline',
+        'mode.master':         'Mastering Pipeline',
+    },
+    fr: {
+        'app.title':           'Automatisation Sous-titres',
+        'sidebar.sub':         'Sub',
+        'sidebar.legal':       'Légal',
+        'sidebar.master':      'Master',
+        'preview.placeholder': 'Importer une vidéo pour prévisualiser',
+        'sub.source_video':    'Vidéo Source',
+        'upload.drop_video':   'Déposer une vidéo ou cliquer pour parcourir',
+        'sub.mode_label':      'Mode Sous-titres',
+        'sub.auto_ai':         'Auto IA',
+        'sub.excel_import':    'Import Excel',
+        'sub.ai_desc':         "L'IA génère automatiquement des sous-titres à partir de l'audio de votre vidéo via Whisper.",
+        'sub.upload_excel':    'Importer un Excel / CSV de traduction',
+        'sub.add_row':         'Ajouter une ligne',
+        'sub.cells_editable':  'Les cellules sont modifiables',
+        'sub.advanced':        'Paramètres avancés',
+        'sub.translate_to':    'Traduire en',
+        'sub.live_preview':    'Aperçu en direct',
+        'sub.font':            'Police',
+        'sub.font_size':       'Taille police',
+        'sub.position':        'Position',
+        'sub.output_preset':   'Format de sortie',
+        'sub.fmt.standard':    '🌐 Standard MP4 (H.264)',
+        'sub.fmt.prores':      '🎬 ProRes 422 (.MOV)',
+        'sub.fmt.highbitrate': '🚀 Débit élevé 20Mbps',
+        'sub.fmt.ae':          '🧩 Package AE (ProRes+WAV+SRT+JSON)',
+        'sub.info.standard':   'Idéal pour le partage web et les révisions générales.',
+        'sub.info.prores':     'Haute qualité pour la post-production et le montage.',
+        'sub.info.highbitrate':'Débit élevé pour la diffusion ou l\'archivage.',
+        'sub.info.ae':         'Bundle complet pour le workflow After Effects.',
+        'sub.font_default':    'Défaut (Helvetica)',
+        'sub.generate':        'Générer les sous-titres',
+        'legal.options':       'Options Légales',
+        'legal.country':       'Pays',
+        'legal.media_type':    'Type de Média',
+        'legal.social':        'Réseaux Sociaux',
+        'legal.tv':            'TV / Diffusion',
+        'legal.usage_type':    "Type d'Utilisation",
+        'legal.shareable':     'Partageable',
+        'legal.non_shareable': 'Non Partageable',
+        'legal.post_type':     'Type de Post (9:16)',
+        'legal.output_format': 'Format de Sortie',
+        'legal.legal_preview': 'Vidéo de Prévisualisation Légale',
+        'legal.ae_package':    '🧩 Package AE Légal',
+        'legal.submit':        'Ajouter Contenu Légal',
+        'master.gold_pos':     'Gold POS',
+        'master.scene_ai':     'IA Scènes',
+        'master.version':      'Version (VO)',
+        'master.matrix':       'Matrice',
+        'master.loading':      'Chargement…',
+        'master.deliverable':  'Lignes Livrables',
+        'master.formats':      'Formats',
+        'master.lengths':      'Durées (s)',
+        'master.codecs':       'Codecs',
+        'master.preview_plan': 'Aperçu du Plan',
+        'master.queue_render': 'Lancer le Rendu',
+        'master.scene_analysis': 'Analyse de Scènes',
+        'master.analyze_scenes': 'Analyser les Scènes',
+        'master.smart_cut':    'Coupe Intelligente',
+        'master.remove_intro': "Supprimer l'Intro",
+        'master.remove_outro': "Supprimer l'Outro",
+        'master.remove_logo':  'Supprimer le Logo',
+        'master.remove_product': 'Supprimer le Produit',
+        'master.logo_removal': 'Suppression du Logo',
+        'master.remove_logo_ai': 'Supprimer Logo (IA)',
+        'master.logo_replace': 'Remplacement de Logo',
+        'master.upload_logo':  'Importer un nouveau logo',
+        'master.replace_logo': 'Remplacer le Logo',
+        'master.add_packshot': 'Ajouter Packshot',
+        'master.upload_packshot': "Importer l'image packshot",
+        'master.object_removal': "Suppression d'Objet (LaMa IA)",
+        'master.open_inpaint': "Ouvrir l'Outil d'Inpainting",
+        'status.ready':        'Prêt',
+        'mode.subtitle':       'Pipeline Sous-titres',
+        'mode.legal':          'Pipeline Légal',
+        'mode.master':         'Pipeline Mastering',
+    },
+};
+
+let currentLang = 'en';
+
+function setLang(lang) {
+    currentLang = lang;
+    const dict = I18N[lang] || I18N['en'];
+
+    // Update all data-i18n elements
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (dict[key] !== undefined) el.textContent = dict[key];
+    });
+
+    // Update navbar mode label separately (its key depends on current mode)
+    const modeEl = document.getElementById('navbar-mode-label');
+    if (modeEl) {
+        const modeKey = modeEl.getAttribute('data-i18n-mode');
+        const translated = dict['mode.' + modeKey];
+        if (translated) modeEl.textContent = translated;
+    }
+
+    // Toggle button shows the OTHER language you can switch to
+    const btn = document.getElementById('lang-toggle');
+    if (btn) btn.textContent = lang === 'en' ? '🇫🇷 FR' : '🇬🇧 EN';
+}
+
+function toggleLang() {
+    setLang(currentLang === 'en' ? 'fr' : 'en');
+}
+
 // ── MODE SWITCHING ────────────────────────────────────────────
 const MODE_LABELS = {
     subtitle: 'Subtitle Pipeline',
@@ -24,7 +211,11 @@ function switchMode(mode) {
 
     // Navbar label
     const lbl = document.getElementById('navbar-mode-label');
-    if (lbl) lbl.textContent = MODE_LABELS[mode] || mode;
+    if (lbl) {
+        lbl.setAttribute('data-i18n-mode', mode);
+        const dict = I18N[currentLang] || I18N['en'];
+        lbl.textContent = dict['mode.' + mode] || MODE_LABELS[mode] || mode;
+    }
 
     // Load Gold manifest when entering Master
     if (mode === 'master' && typeof loadGoldManifest === 'function') {
@@ -1513,13 +1704,14 @@ function updateFormatInfo(val) {
     const infoBox  = document.getElementById('format-info-box');
     if (!infoText || !infoBox) return;
 
+    const dict = I18N[currentLang] || I18N['en'];
     const map = {
-        mp4_standard: ['Ideal for web sharing and general review.', 'var(--text-muted)'],
-        prores:       ['Production quality (ProRes 422). File will be large (.mov).', 'var(--warning)'],
-        mp4_20mbps:   ['High quality CBR 20Mbps for professional digital delivery.', 'var(--success)'],
-        ae_package:   ['Creates AE-ready folder: ProRes video, WAV audio, SRT, timeline JSON + ZIP.', 'var(--primary)'],
+        mp4_standard: [dict['sub.info.standard']   || 'Ideal for web sharing and general review.', 'var(--text-muted)'],
+        prores:       [dict['sub.info.prores']      || 'High quality for post-production.', 'var(--warning)'],
+        mp4_20mbps:   [dict['sub.info.highbitrate'] || 'High bitrate for broadcast or archive.', 'var(--success)'],
+        ae_package:   [dict['sub.info.ae']          || 'Full asset bundle for After Effects.', 'var(--primary)'],
     };
-    const [text, color] = map[val] || ['Standard output format.', 'var(--text-muted)'];
+    const [text, color] = map[val] || [dict['sub.info.standard'] || 'Standard output.', 'var(--text-muted)'];
     infoText.textContent = text;
     infoBox.style.color  = color;
 }
@@ -1729,6 +1921,7 @@ function pollVideoInpaint(jobId) {
 });
 
 loadFontList();
+setLang('en');
 
 // ── DRAG & DROP SETUP ─────────────────────────────────────────
 setupVideoDropZone('video-upload-1', 'input[type="file"]', updatePreview);
