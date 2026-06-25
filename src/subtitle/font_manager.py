@@ -82,7 +82,7 @@ class FontManager:
                 
         return config
     
-    def get_ffmpeg_font_options(self, language: str, video_format: str = "16x9") -> Dict:
+    def get_ffmpeg_font_options(self, language: str, video_format: str = "16x9", font_family_override: Optional[str] = None, font_size_override: Optional[int] = None, margin_v_override: Optional[int] = None) -> Dict:
         """Lấy options cho FFmpeg subtitle filter"""
         config = self.get_font_config(language)
         
@@ -97,32 +97,47 @@ class FontManager:
         margin_v = None
         outline = 0
         outline_color_ass = "&H00000000"
-        
+        shadow = config.shadow_width   # distance
+        blur = config.shadow_blur      # softness
+        border_style = 1               # 1=outline+shadow, 3=opaque box
+
         if video_format == "16x9":
+            # SUB_16-9: Helvetica 48, no outline, shadow dist=2 blur=12, no box
             adjusted_size = 48
+            shadow = 2.0
+            blur = 12
+            border_style = 1
         elif video_format == "9x16":
             adjusted_size = 55
-            # Story preset: top-left anchored, offset from top.
             alignment = 2
             margin_l = 0
             margin_r = 0
             margin_v = 100
-            outline = 4
-            outline_color_ass = "&H00FFFFFF"
+            outline = 0
+            blur = 12
+            border_style = 1
         elif video_format == "1x1":
             adjusted_size = 48
-            # 1x1 track style: horizontal stretch only.
             scale_x = 1.62
+            blur = 12
+            border_style = 1
         elif video_format == "4x5":
             adjusted_size = 48
-            
+            blur = 12
+            border_style = 1
+
+        if font_size_override is not None:
+            adjusted_size = font_size_override
+        if margin_v_override is not None:
+            margin_v = margin_v_override
+
         return {
-            "fontname": config.font_family,
+            "fontname": font_family_override or config.font_family,
             "fontsize": adjusted_size,
             "fontcolor": config.font_color,
             "outline": outline,
-            "shadow": config.shadow_width,
-            "blur": config.shadow_blur,
+            "shadow": shadow,
+            "blur": blur,
             "backcolor": config.shadow_color,
             "scalex": int(100 * scale_x),
             "scaley": int(100 * scale_y),
@@ -133,6 +148,7 @@ class FontManager:
             "margin_r": margin_r,
             "margin_v": margin_v,
             "outline_color_ass": outline_color_ass,
+            "border_style": border_style,
         }
     
     def get_available_languages(self) -> List[str]:

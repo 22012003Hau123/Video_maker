@@ -1,2946 +1,604 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Subtitles Automation</title>
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        :root {
-            --primary: #3b82f6;
-            --primary-dark: #2563eb;
-            --secondary: #60a5fa;
-            --background: #0f172a;
-            --surface: #1e293b;
-            --surface-light: #334155;
-            --text: #f8fafc;
-            --text-muted: #94a3b8;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --error: #ef4444;
-        }
-        
-        body {
-            font-family: 'Segoe UI', system-ui, sans-serif;
-            background: var(--background);
-            color: var(--text);
-            min-height: 100vh;
-        }
-        
-        .navbar {
-            background: var(--surface);
-            padding: 1rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-            border-bottom: 1px solid var(--surface-light);
-        }
-
-/* ... skipping lines ... */
-
-        .tab.active {
-            background: var(--primary);
-            color: white;
-        }
-
-/* ... skipping lines ... */
-
-        .btn-primary {
-            background: var(--primary);
-            color: white;
-        }
-        
-        .logo {
-            font-size: 1.5rem;
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-        
-        .tabs {
-            display: flex;
-            gap: 1rem;
-            margin-bottom: 2rem;
-        }
-        
-        .tab {
-            padding: 1rem 2rem;
-            background: var(--surface);
-            border: none;
-            border-radius: 12px;
-            color: var(--text-muted);
-            cursor: pointer;
-            transition: all 0.3s;
-            font-size: 1rem;
-        }
-        
-        .tab:hover {
-            background: var(--surface-light);
-        }
-        
-        .tab.active {
-            background: var(--primary);
-            color: white;
-        }
-        
-        .panel {
-            display: none;
-            background: var(--surface);
-            border-radius: 16px;
-            padding: 2rem;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-        }
-        
-        .panel.active {
-            display: block;
-            animation: fadeIn 0.3s ease;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .panel h2 {
-            font-size: 1.5rem;
-            margin-bottom: 1.5rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .form-group {
-            margin-bottom: 1rem;
-        }
-        
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: var(--text-muted);
-            font-size: 0.9rem;
-        }
-        
-        .form-group input[type="file"] {
-            display: none;
-        }
-        
-        .file-upload {
-            border: 2px dashed var(--surface-light);
-            border-radius: 12px;
-            padding: 2rem;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        
-        .file-upload:hover {
-            border-color: var(--primary);
-            background: rgba(99, 102, 241, 0.1);
-        }
-        
-        .file-upload.has-file {
-            border-color: var(--success);
-            background: rgba(16, 185, 129, 0.1);
-        }
-
-        .file-upload.drag-over {
-            border-color: var(--primary);
-            background: rgba(59, 130, 246, 0.16);
-            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) inset;
-        }
-        
-        .file-upload .icon {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            color: var(--primary);
-        }
-        
-        i {
-            vertical-align: middle;
-            font-size: 1.2em;
-        }
-        
-        select, input[type="text"], input[type="number"] {
-            width: 100%;
-            padding: 0.75rem 1rem;
-            background: var(--surface-light);
-            border: 1px solid transparent;
-            border-radius: 8px;
-            color: var(--text);
-            font-size: 1rem;
-            transition: all 0.3s;
-        }
-        
-        select:focus, input:focus {
-            outline: none;
-            border-color: var(--primary);
-        }
-        
-        .checkbox-group {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .checkbox-group input[type="checkbox"] {
-            width: 20px;
-            height: 20px;
-            accent-color: var(--primary);
-        }
-        
-        .btn {
-            padding: 1rem 2rem;
-            border: none;
-            border-radius: 12px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        
-        .btn-primary {
-            background: var(--primary);
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(99, 102, 241, 0.3);
-        }
-        
-        .btn-primary:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
-        
-        .btn-toggle {
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.2);
-            padding: 0.5rem 1rem;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .btn-toggle:hover {
-            background: rgba(255,255,255,0.2);
-        }
-        
-        .btn-toggle.active {
-            background: var(--primary);
-            border-color: transparent;
-        }
-        
-        .grid-2 {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 1.5rem;
-        }
-        
-        @media (max-width: 768px) {
-            .grid-2 {
-                grid-template-columns: 1fr;
-            }
-        }
-        
-        .status-box {
-            background: var(--surface-light);
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-top: 1.5rem;
-        }
-        
-        .status-box h3 {
-            margin-bottom: 1rem;
-        }
-        
-        .progress-bar {
-            height: 12px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 6px;
-            overflow: hidden;
-            margin-bottom: 0.75rem;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-        }
-        
-        .progress-bar .fill {
-            height: 100%;
-            background: var(--primary);
-            border-radius: 4px;
-            transition: width 0.5s ease;
-        }
-        
-        .status-text {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            color: var(--text);
-            font-size: 0.95rem;
-            font-weight: 500;
-        }
-        
-        .status-percent {
-            color: var(--primary);
-            font-weight: 700;
-        }
-        
-        .status-completed {
-            color: var(--success);
-        }
-        
-        .status-failed {
-            color: var(--error);
-        }
-        
-        .download-btn {
-            margin-top: 1rem;
-        }
-
-        /* Collapsible Settings */
-        .settings-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            background: var(--surface-light);
-            padding: 0.75rem 1rem;
-            border-radius: 8px;
-            cursor: pointer;
-            margin-bottom: 1rem;
-            border: 1px solid var(--border-color);
-            transition: all 0.2s ease;
-        }
-
-        .settings-header:hover {
-            background: rgba(255, 255, 255, 0.05);
-            border-color: var(--primary);
-        }
-
-        .settings-header h3 {
-            margin: 0;
-            font-size: 0.95rem;
-            display: flex;
-            align-items: center;
-            gap: 0.6rem;
-            color: var(--text);
-        }
-
-        .settings-content {
-            overflow: hidden;
-            transition: max-height 0.3s ease-out, opacity 0.3s ease;
-            max-height: 1000px;
-            opacity: 1;
-        }
-
-        .settings-content.collapsed {
-            max-height: 0;
-            opacity: 0;
-            margin-bottom: 0;
-        }
-
-        .toggle-icon {
-            transition: transform 0.3s ease;
-        }
-
-        .collapsed .toggle-icon {
-            transform: rotate(-90deg);
-        }
-        .download-btn {
-            background: var(--success);
-            color: white;
-        }
-        
-        .footer {
-            text-align: center;
-            padding: 2rem;
-            color: var(--text-muted);
-            font-size: 0.9rem;
-        }
-        
-        .input-tabs {
-            display: flex;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-        }
-        
-        .input-tab {
-            padding: 0.75rem 1.5rem;
-            background: var(--surface-light);
-            border: 2px solid transparent;
-            border-radius: 8px;
-            color: var(--text-muted);
-            cursor: pointer;
-            transition: all 0.3s;
-            font-size: 0.9rem;
-        }
-        
-        .input-tab:hover {
-            background: var(--background);
-        }
-        
-        .input-tab.active {
-            border-color: var(--primary);
-            color: var(--text);
-            background: rgba(99, 102, 241, 0.2);
-        }
-        
-        .input-content {
-            display: none;
-        }
-        
-        .input-content.active {
-            display: block;
-            animation: fadeIn 0.3s ease;
-        }
-        
-        .checkbox-label {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            cursor: pointer;
-            padding: 0.3rem 0.6rem;
-            border-radius: 6px;
-            transition: background 0.2s;
-        }
-        
-        .checkbox-label:hover {
-            background: rgba(255,255,255,0.1);
-        }
-        
-        textarea {
-            width: 100%;
-            min-height: 120px;
-            padding: 0.75rem;
-            background: var(--surface-light);
-            border: 2px solid transparent;
-            border-radius: 12px;
-            color: var(--text);
-            font-size: 1rem;
-            font-family: inherit;
-            resize: vertical;
-            transition: all 0.3s;
-        }
-        
-        textarea:focus {
-            outline: none;
-            border-color: var(--primary);
-        }
-        
-        [contenteditable="true"]:focus {
-            background: rgba(59, 130, 246, 0.05);
-            border-color: var(--primary) !important;
-            box-shadow: inset 0 0 0 1px var(--primary);
-        }
-        #translation-table th {
-            font-weight: 600;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-        /* Modal styles from Mastering_video */
-        .modal-overlay {
-            position: fixed; inset: 0; z-index: 1000;
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(8px);
-            display: flex; align-items: center; justify-content: center;
-            visibility: hidden; opacity: 0;
-            transition: all 0.3s ease;
-        }
-        .modal-overlay.active { visibility: visible; opacity: 1; }
-        .modal-content {
-            background: var(--surface);
-            border: 1px solid var(--surface-light);
-            border-radius: 12px;
-            max-width: 1000px; width: 95%;
-            max-height: 90vh; overflow-y: auto;
-            transform: scale(0.95);
-            transition: all 0.3s ease;
-            padding: 2rem;
-            box-shadow: 0 25px 50px rgba(0,0,0,0.5);
-        }
-        .modal-overlay.active .modal-content { transform: scale(1); }
-        
-        #inpaint-canvas {
-            background: #000;
-            max-width: 100%;
-            height: auto;
-            border-radius: 8px;
-            cursor: crosshair;
-            display: none;
-        }
-        .canvas-container {
-            position: relative;
-            background: #000;
-            border-radius: 8px;
-            overflow: hidden;
-            border: 1px solid var(--surface-light);
-        }
-        
-        .modal-tabs {
-            display: flex; gap: 0.5rem; border-bottom: 1px solid var(--surface-light); margin-bottom: 1.5rem;
-        }
-        .modal-tab {
-            padding: 0.75rem 1.5rem; cursor: pointer; color: var(--text-muted); border-bottom: 2px solid transparent;
-        }
-        .modal-tab.active {
-            color: var(--primary); border-bottom: 2px solid var(--primary);
-        }
-        .modal-panel { display: none; }
-        .modal-panel.active { display: block; }
-
-        /* Toast notifications */
-        .toast-container {
-            position: fixed; top: 1.5rem; right: 1.5rem; z-index: 9999;
-            display: flex; flex-direction: column; gap: 0.5rem;
-        }
-        .toast {
-            padding: 0.75rem 1.25rem; border-radius: 10px; color: white;
-            font-size: 0.85rem; font-weight: 500;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-            animation: toastIn 0.35s ease, toastOut 0.35s ease 4s forwards;
-            display: flex; align-items: center; gap: 0.5rem;
-            max-width: 350px;
-        }
-        .toast.success { background: #2ecc71; color: #fff; }
-        .toast.error { background: #e74c3c; }
-        .toast.info { background: #6366f1; }
-        @keyframes toastIn { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        @keyframes toastOut { from { opacity: 1; } to { opacity: 0; transform: translateY(-10px); } }
-
-        .card-status {
-            margin-top: 0.75rem; padding: 0.5rem 0.75rem; border-radius: 6px;
-            font-size: 0.8rem; display: none; align-items: center; gap: 0.5rem;
-            background: rgba(99, 102, 241, 0.1); color: var(--primary);
-        }
-        .card-status.active { display: flex; }
-        .card-status.done { background: rgba(67, 233, 123, 0.1); color: #43e97b; }
-        .card-status.error { background: rgba(245, 87, 108, 0.1); color: #f5576c; }
-        /* Export Options Redesign */
-        .export-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 1.5rem;
-            margin-top: 0.5rem;
-        }
-        
-        @media (max-width: 768px) {
-            .export-grid { grid-template-columns: 1fr; }
-        }
-        
-        .export-card {
-            background: var(--surface-light);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            padding: 1.25rem;
-            transition: all 0.3s ease;
-            position: relative;
-            cursor: pointer;
-        }
-        
-        .export-card:hover {
-            border-color: var(--primary);
-            background: rgba(59, 130, 246, 0.05);
-            transform: translateY(-2px);
-        }
-        
-        .export-card.active {
-            border-color: var(--primary);
-            background: rgba(59, 130, 246, 0.1);
-            box-shadow: 0 4px 20px rgba(59, 130, 246, 0.15);
-        }
-        
-        .export-card input[type="checkbox"] {
-            position: absolute;
-            top: 1rem;
-            right: 1rem;
-            width: 18px;
-            height: 18px;
-        }
-        
-        .export-card-content {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-        
-        .export-card-icon {
-            font-size: 2rem;
-            color: var(--primary);
-            background: rgba(59, 130, 246, 0.1);
-            width: 50px;
-            height: 50px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 10px;
-        }
-        
-        .export-card-text b {
-            display: block;
-            margin-bottom: 0.2rem;
-        }
-        
-        .export-card-text span {
-            font-size: 0.8rem;
-            color: var(--text-muted);
-        }
-        
-        .format-select-container {
-            background: var(--surface-light);
-            border-radius: 12px;
-            padding: 1.25rem;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-        }
-        
-        .format-info {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-top: 0.5rem;
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            padding: 0.5rem;
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 6px;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Subtitles Automation</title>
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<link rel="stylesheet" href="/static/css/main.css">
 </head>
 <body>
-    <div id="toast-container" class="toast-container"></div>
-    <nav class="navbar">
-        <div class="logo">
-            <i class="ph ph-film-slate"></i> Video Subtitles Automation
-        </div>
 
-    </nav>
-    
-    <div class="container">
-        <div class="tabs">
-            <button class="tab active" onclick="switchTab('subtitle')"><i class="ph ph-closed-captioning"></i> Subtitles</button>
-            <button class="tab" onclick="switchTab('legal')"><i class="ph ph-scales"></i> Legal</button>
-            <button class="tab" onclick="switchTab('master')"><i class="ph ph-magic-wand"></i> Master</button>
+<!-- ══ NAVBAR ══════════════════════════════════════════════ -->
+<nav class="navbar">
+    <div class="navbar-logo">
+        <i class="ph ph-film-slate"></i>
+        Video Subtitles Automation
+    </div>
+    <div class="navbar-mode" id="navbar-mode-label">Subtitle Pipeline</div>
+    <div class="navbar-actions">
+        <span id="worker-badge"></span>
+    </div>
+</nav>
+
+<!-- ══ WORKSPACE ════════════════════════════════════════════ -->
+<div class="workspace">
+
+    <!-- Left Sidebar -->
+    <aside class="sidebar">
+        <button class="sidebar-btn active" id="sb-subtitle" onclick="switchMode('subtitle')">
+            <i class="ph ph-closed-captioning"></i>
+            <span>Sub</span>
+        </button>
+        <button class="sidebar-btn" id="sb-legal" onclick="switchMode('legal')">
+            <i class="ph ph-scales"></i>
+            <span>Legal</span>
+        </button>
+        <button class="sidebar-btn" id="sb-master" onclick="switchMode('master')">
+            <i class="ph ph-magic-wand"></i>
+            <span>Master</span>
+        </button>
+    </aside>
+
+    <!-- Center: Video Preview -->
+    <main class="preview-area">
+        <div class="preview-wrapper">
+            <video id="main-preview-player" controls playsinline preload="metadata"></video>
+            <img id="main-preview-img" alt="Preview">
+            <div class="preview-placeholder" id="main-preview-placeholder">
+                <i class="ph ph-film-strip"></i>
+                <p>Upload a video to preview</p>
+            </div>
+            <!-- Live subtitle preview overlay -->
+            <div id="sub-preview-overlay" style="display:none; position:absolute; left:0; right:0; bottom:0; text-align:center; pointer-events:none; padding:0 4%;">
+                <span id="sub-preview-text" style="display:inline-block; color:#fff; font-family:Helvetica,Arial,sans-serif; font-size:20px; line-height:1.3; text-shadow:0 2px 12px rgba(0,0,0,0.5); white-space:pre-line;">Subtitle preview text</span>
+            </div>
         </div>
-        
-        <!-- Subtitle Panel (Unified) -->
-        <div id="panel-subtitle" class="panel active">
-            <h2><i class="ph ph-translate"></i> Multilingual Subtitles</h2>
-            <p style="color: var(--text-muted); margin-bottom: 1.5rem;">
-                Generate AI subtitles, translate to multiple languages, and export AE-ready subtitle sidecar files.
-            </p>
-            
-            <form id="subtitle-form" onsubmit="submitSubtitle(event)">
-                <!-- Video Upload + Preview Grid -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
-                    <!-- Left: Upload -->
-                    <div class="form-group">
-                        <label>Video File</label>
-                        <label class="file-upload" id="video-upload-1" style="min-height: 180px;">
-                            <input type="file" name="video" accept="video/*" onchange="handleFileSelect(this, 'video-upload-1'); updatePreview(this);">
-                            <div class="icon"><i class="ph ph-video-camera"></i></div>
-                            <div>Drag & drop or click to select video</div>
-                        </label>
+    </main>
+
+    <!-- Right: Controls Panel -->
+    <aside class="controls">
+        <div class="controls-scroll">
+
+            <!-- ── SUBTITLE PANEL ──────────────────────────── -->
+            <div class="mode-panel active" id="panel-subtitle">
+                <form id="subtitle-form" onsubmit="submitSubtitle(event)">
+
+                    <!-- Upload Zone -->
+                    <div class="section-label">Source Video</div>
+                    <label class="upload-zone" id="video-upload-1">
+                        <input type="file" name="video" accept="video/*"
+                               onchange="handleFileSelect(this,'video-upload-1'); updatePreview(this);">
+                        <i class="ph ph-video-camera upload-icon"></i>
+                        <div class="upload-title">Drop video or click to browse</div>
+                        <div class="upload-sub">MP4 · MOV · AVI · MKV</div>
+                        <div class="upload-filename" style="display:none"></div>
+                    </label>
+
+                    <!-- Subtitle Mode Toggle -->
+                    <div class="section-label" style="margin-top:0.25rem;">Subtitle Mode</div>
+                    <div class="toggle-tabs">
+                        <button type="button" class="toggle-tab active" id="tab-auto"
+                                onclick="switchInputMode('auto')">
+                            <i class="ph ph-robot"></i> Auto AI
+                        </button>
+                        <button type="button" class="toggle-tab" id="tab-text"
+                                onclick="switchInputMode('text')">
+                            <i class="ph ph-table"></i> Excel Import
+                        </button>
                     </div>
-                    
-                    <!-- Right: Preview -->
-                    <div class="form-group">
-                        <label>Preview</label>
-                        <div id="video-preview" style="background: var(--surface-light); border-radius: 12px; min-height: 180px; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden;">
-                            <video id="preview-player" controls playsinline preload="metadata" style="width: 100%; height: 180px; object-fit: contain; display: none;"></video>
-                            <img id="preview-img" style="width: 100%; height: 180px; object-fit: contain; display: none;">
-                            <span id="preview-placeholder" style="color: var(--text-muted);"><i class="ph ph-film-strip"></i> Preview will appear here</span>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Subtitle Input -->
-                <div class="form-group">
-                    <label>Subtitle Mode:</label>
-                    <div class="input-tabs">
-                        <button type="button" class="input-tab active" onclick="switchInputMode('auto')"><i class="ph ph-robot"></i> Auto (AI)</button>
-                        <button type="button" class="input-tab" onclick="switchInputMode('text')"><i class="ph ph-table"></i> Manual Excel (Table)</button>
-                    </div>
-                    
+
+                    <!-- Auto AI mode info -->
                     <div id="auto-input" class="input-content active">
-                        <div style="background: rgba(59, 130, 246, 0.1); padding: 1rem; border-radius: 8px; text-align: center; border: 1px solid rgba(59, 130, 246, 0.2);">
-                            <i class="ph ph-robot" style="font-size: 1.5em; vertical-align: middle;"></i> <strong>AI will automatically generate subtitles</strong> from video audio.
+                        <div class="info-box">
+                            <i class="ph ph-robot"></i>
+                            AI automatically generates subtitles from your video audio via Whisper.
                         </div>
                     </div>
-                    
+
+                    <!-- Manual Excel mode -->
                     <div id="text-input" class="input-content">
-                        <div id="excel-upload-container" style="padding: 1.5rem; border: 2px dashed var(--border-color); border-radius: 12px; text-align: center; background: var(--surface-light); margin-bottom: 1rem; cursor: pointer;" onclick="document.getElementById('excel-translation-input').click()">
-                            <input type="file" id="excel-translation-input" accept=".xlsx, .xls, .csv" style="display: none;" onchange="handleTranslationExcel(this)">
-                            <div style="font-size: 2rem; color: var(--primary); margin-bottom: 0.5rem;"><i class="ph ph-file-xls"></i></div>
-                            <div style="font-weight: 600;">Upload Translation Excel / CSV</div>
-                            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.4rem;">Supports: .xlsx, .xls, .csv (Any language headers: en, vi, zh, de, ...)</div>
+                        <div id="excel-upload-container" class="upload-zone"
+                             onclick="document.getElementById('excel-translation-input').click()">
+                            <input type="file" id="excel-translation-input"
+                                   accept=".xlsx,.xls,.csv" style="display:none;"
+                                   onchange="handleTranslationExcel(this)">
+                            <i class="ph ph-file-xls upload-icon" style="color:var(--success);"></i>
+                            <div class="upload-title">Upload Translation Excel / CSV</div>
+                            <div class="upload-sub">.xlsx · .xls · .csv</div>
                         </div>
 
-                        <div id="translation-table-container" style="display: none; max-height: 400px; overflow: auto; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface);">
-                            <table id="translation-table" style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
-                                <thead style="position: sticky; top: 0; background: var(--surface-light); border-bottom: 2px solid var(--border-color); z-index: 10;">
+                        <div id="translation-table-container"
+                             style="display:none; max-height:280px; overflow:auto; border:1px solid var(--border); border-radius:var(--radius); background:var(--panel-light);">
+                            <table id="translation-table">
+                                <thead>
                                     <tr>
-                                        <th style="padding: 0.8rem; text-align: left; width: 40px;">#</th>
-                                        <th style="padding: 0.8rem; text-align: left;">EN (Source)</th>
-                                        <th style="padding: 0.8rem; text-align: left;">FR</th>
-                                        <th style="padding: 0.8rem; text-align: left;">ES</th>
-                                        <th style="padding: 0.8rem; text-align: left;">NL</th>
-                                        <th style="padding: 0.8rem; text-align: left;">JP</th>
-                                        <th style="padding: 0.8rem; text-align: center; width: 80px;">Action</th>
+                                        <th>#</th>
+                                        <th>EN (Source)</th>
+                                        <th>FR</th>
+                                        <th>ES</th>
+                                        <th>NL</th>
+                                        <th>JP</th>
+                                        <th style="text-align:center;width:60px;">Del</th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
                             </table>
-                            <div style="padding: 0.8rem; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--surface-light);">
-                                <button type="button" class="btn btn-sm" onclick="addTranslationRow()"><i class="ph ph-plus"></i> Add Row</button>
-                                <span style="font-size: 0.75rem; color: var(--text-muted);">* Cells are editable. Click to change text.</span>
+                            <div style="padding:0.6rem 0.75rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:var(--panel);">
+                                <button type="button" class="btn btn-ghost btn-sm" onclick="addTranslationRow()">
+                                    <i class="ph ph-plus"></i> Add Row
+                                </button>
+                                <span style="font-size:0.7rem;color:var(--text-muted);">Cells are editable</span>
                             </div>
                         </div>
-                        
                         <input type="hidden" name="subtitle_text" id="subtitle-textarea">
                     </div>
-                </div>
-                
-                <!-- Collapsible Settings Header -->
-                <div class="settings-header collapsed" onclick="toggleSubtitleSettings()">
-                    <h3><i class="ph ph-gear-six"></i> Advanced Settings</h3>
-                    <i class="ph ph-caret-down toggle-icon" id="settings-caret"></i>
-                </div>
 
-                <!-- Collapsible Content -->
-                <div id="subtitle-settings" class="settings-content collapsed">
-                    <!-- Language Settings -->
-                    <div class="grid-2">
-                        <div class="form-group" style="display: none;">
-                            <label>Source Language</label>
-                            <select name="source_lang">
-                                <option value="auto" selected>Auto Detect</option>
-                                <option value="en">🇺🇸 US English</option>
-                                <option value="uk">🇬🇧 UK English</option>
-                                <option value="de">🇩🇪 German</option>
-                                <option value="it">🇮🇹 Italian</option>
-                            </select>
+                    <!-- Settings (collapsible) -->
+                    <div>
+                        <div class="collapse-header" id="sub-settings-hdr" onclick="toggleCollapse('sub-settings-hdr','sub-settings-body')">
+                            <span><i class="ph ph-gear-six"></i> Advanced Settings</span>
+                            <i class="ph ph-caret-right caret"></i>
                         </div>
-                        <div class="form-group" style="display: none;">
-                            <input type="hidden" name="video_format" value="16x9">
-                        </div>
-                    </div>
-                    
-                    <!-- Target Languages -->
-                    <div class="form-group" id="target-language-group">
-                        <label>Translate to (Multi-select)</label>
-                        <div style="display: flex; flex-wrap: wrap; gap: 0.8rem; padding: 0.5rem; background: var(--surface-light); border-radius: 8px;">
-                            <label class="checkbox-label">
-                                <input type="checkbox" name="lang_fr" value="fr" checked> 🇫🇷 French
+                        <div class="collapse-body" id="sub-settings-body">
+                            <!-- Hidden fields -->
+                            <input type="hidden" name="source_lang" value="auto">
+                            <input type="hidden" name="video_format" value="16x9" id="sub-video-format">
+
+                            <!-- Target Languages -->
+                            <div class="field" id="target-language-group">
+                                <label>Translate to</label>
+                                <div class="lang-grid">
+                                    <label class="lang-chip"><input type="checkbox" name="lang_fr" value="fr" checked> 🇫🇷 FR</label>
+                                    <label class="lang-chip"><input type="checkbox" name="lang_es" value="es" checked> 🇪🇸 ES</label>
+                                    <label class="lang-chip"><input type="checkbox" name="lang_nl" value="nl" checked> 🇳🇱 NL</label>
+                                    <label class="lang-chip"><input type="checkbox" name="lang_ja" value="ja" checked> 🇯🇵 JA</label>
+                                    <label class="lang-chip"><input type="checkbox" name="lang_en" value="en"> 🇺🇸 EN</label>
+                                    <label class="lang-chip"><input type="checkbox" name="lang_uk" value="uk"> 🇬🇧 UK</label>
+                                    <label class="lang-chip"><input type="checkbox" name="lang_de" value="de"> 🇩🇪 DE</label>
+                                    <label class="lang-chip"><input type="checkbox" name="lang_it" value="it"> 🇮🇹 IT</label>
+                                </div>
+                            </div>
+
+                            <!-- Live Preview Toggle -->
+                            <label class="lang-chip" style="width:100%;justify-content:center;padding:0.4rem;" id="sub-preview-toggle">
+                                <input type="checkbox" id="sub-preview-enabled" onchange="toggleSubPreview(this.checked)">
+                                <i class="ph ph-eye"></i> Live preview subtitle
                             </label>
-                            <label class="checkbox-label">
-                                <input type="checkbox" name="lang_es" value="es" checked> 🇪🇸 Spanish
-                            </label>
-                            <label class="checkbox-label">
-                                <input type="checkbox" name="lang_nl" value="nl" checked> 🇳🇱 Dutch
-                            </label>
-                            <label class="checkbox-label">
-                                <input type="checkbox" name="lang_ja" value="ja" checked> 🇯🇵 Japanese
-                            </label>
-                            <label class="checkbox-label">
-                                <input type="checkbox" name="lang_en" value="en"> 🇺🇸 US English
-                            </label>
-                            <label class="checkbox-label">
-                                <input type="checkbox" name="lang_uk" value="uk"> 🇬🇧 UK English
-                            </label>
-                            <label class="checkbox-label">
-                                <input type="checkbox" name="lang_de" value="de"> 🇩🇪 German
-                            </label>
-                             <label class="checkbox-label">
-                                <input type="checkbox" name="lang_it" value="it"> 🇮🇹 Italian
-                            </label>
-                        </div>
-                    </div>
-                    
-                    <!-- Export Options Redesign -->
-                    <div class="form-group" style="margin-top: 1.5rem;">
-                        <label><i class="ph ph-hard-drives"></i> Output & Format</label>
-                        <div class="export-grid">
-                            <!-- Format Selector -->
-                            <div class="format-select-container">
-                                <label style="font-size: 0.8rem; margin-bottom: 0.5rem; display: block; color: var(--text-muted);">Encoding Preset:</label>
+
+                            <!-- Font Family -->
+                            <div class="field">
+                                <label>Font chữ</label>
+                                <div style="display:flex;gap:0.4rem;align-items:center;">
+                                    <select name="font_family" id="font-family-select" style="flex:1;" onchange="updateSubPreview()">
+                                        <option value="">Default (Helvetica)</option>
+                                    </select>
+                                    <label class="btn btn-ghost" style="cursor:pointer;padding:0.45rem 0.65rem;font-size:0.78rem;" title="Upload font (.ttf/.otf)">
+                                        <i class="ph ph-upload-simple"></i>
+                                        <input type="file" id="font-upload-input" accept=".ttf,.otf" style="display:none;" onchange="uploadFont(this)">
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Font Size + Position -->
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
+                                <div class="field">
+                                    <label>Cỡ chữ <span id="font-size-val" style="color:var(--primary);font-weight:700;">48</span>px</label>
+                                    <input type="range" id="sub-font-size" name="font_size" min="24" max="120" value="48" step="2" oninput="document.getElementById('font-size-val').textContent=this.value; updateSubPreview();">
+                                </div>
+                                <div class="field">
+                                    <label>Vị trí <span id="margin-v-val" style="color:var(--primary);font-weight:700;">30</span>px</label>
+                                    <input type="range" id="sub-margin-v" name="margin_v" min="0" max="300" value="30" step="5" oninput="document.getElementById('margin-v-val').textContent=this.value; updateSubPreview();">
+                                </div>
+                            </div>
+
+                            <!-- Export Format -->
+                            <div class="field">
+                                <label>Output Preset</label>
                                 <select name="export_format" onchange="updateFormatInfo(this.value)">
-                                    <option value="mp4_standard">🌐 Standard (MP4 - H.264)</option>
-                                    <option value="prores">🎬 ProRes 422 (.MOV - Production)</option>
-                                    <option value="mp4_20mbps">🚀 High Bitrate (20Mbps - MP4)</option>
-                                    <option value="ae_package">🧩 AE Package (ProRes + WAV + SRT + JSON)</option>
+                                    <option value="mp4_standard">🌐 Standard MP4 (H.264)</option>
+                                    <option value="prores">🎬 ProRes 422 (.MOV)</option>
+                                    <option value="mp4_20mbps">🚀 High Bitrate 20Mbps</option>
+                                    <option value="ae_package">🧩 AE Package (ProRes+WAV+SRT+JSON)</option>
                                 </select>
-                                <div id="format-info-box" class="format-info">
+                                <div id="format-info-box" class="info-box" style="margin-top:0.35rem;">
                                     <i class="ph ph-info"></i>
                                     <span id="format-info-text">Ideal for web sharing and general review.</span>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-                
-                <button type="submit" class="btn btn-primary" id="subtitle-submit">
-                    <i class="ph ph-rocket-launch"></i> Generate Subtitles
-                </button>
-                
-                <div id="subtitle-status" class="status-box" style="display: none;">
-                    <h3>Processing Status</h3>
-                    <div class="progress-bar">
-                        <div class="fill" style="width: 0%"></div>
-                    </div>
-                    <div class="status-text">
-                        <span class="status-label">Waiting...</span>
-                        <span class="status-percent">0%</span>
-                    </div>
-                </div>
-            </form>
-        </div>
-        
 
-        <!-- Legal Panel -->
-        <div id="panel-legal" class="panel">
-            <h2><i class="ph ph-gavel"></i> Add Legal Content</h2>
-            
-            <!-- Video Form -->
-            <form id="legal-form" onsubmit="submitLegal(event)">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
-                    <!-- Left: Upload -->
-                    <div class="form-group">
-                        <label>Video File</label>
-                        <label class="file-upload" id="video-upload-2" style="min-height: 180px;">
-                            <input type="file" name="video" accept="video/*" onchange="handleFileSelect(this, 'video-upload-2')">
-                            <div class="icon"><i class="ph ph-video-camera"></i></div>
-                            <div>Drag & drop or click to select video</div>
-                        </label>
-                    </div>
-                    
-                    <!-- Right: Preview -->
-                    <div class="form-group">
-                        <label>Preview</label>
-                        <div id="legal-video-preview-box" style="background: var(--surface-light); border-radius: 12px; min-height: 180px; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; border: 1px solid var(--border-color);">
-                            <video id="legal-video-player" style="width: 100%; height: 180px; object-fit: contain; display: none;" controls></video>
-                            <img id="legal-video-img" style="width: 100%; height: 180px; object-fit: contain; display: none;">
-                            <span id="legal-video-placeholder" style="color: var(--text-muted);"><i class="ph ph-film-strip"></i> Preview will appear here</span>
+                    <!-- Status Box -->
+                    <div id="subtitle-status" style="display:none;"></div>
+
+                    <!-- Submit (inside form, but visually at the bottom via controls-footer injected) -->
+                    <button type="submit" class="btn btn-primary" id="subtitle-submit">
+                        <i class="ph ph-rocket-launch"></i> Generate Subtitles
+                    </button>
+
+                </form>
+            </div>
+
+            <!-- ── LEGAL PANEL ─────────────────────────────── -->
+            <div class="mode-panel" id="panel-legal">
+                <form id="legal-form" onsubmit="submitLegal(event)">
+
+                    <div class="section-label">Source Video</div>
+                    <label class="upload-zone" id="video-upload-2">
+                        <input type="file" name="video" accept="video/*"
+                               onchange="handleFileSelect(this,'video-upload-2')">
+                        <i class="ph ph-video-camera upload-icon"></i>
+                        <div class="upload-title">Drop video or click to browse</div>
+                        <div class="upload-sub">MP4 · MOV · AVI · MKV</div>
+                        <div class="upload-filename" style="display:none"></div>
+                    </label>
+
+                    <div class="section-label" style="margin-top:0.25rem;">Legal Options</div>
+
+                    <div class="grid-3">
+                        <div class="field">
+                            <label>Country</label>
+                            <select name="country_code">
+                                <option value="DE">🇩🇪 Germany</option>
+                                <option value="UK">🇬🇧 UK</option>
+                                <option value="IT">🇮🇹 Italy</option>
+                                <option value="US">🇺🇸 United States</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label>Media Type</label>
+                            <select name="media_type">
+                                <option value="social">Social Media</option>
+                                <option value="tv">TV / Broadcast</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label>Usage Type</label>
+                            <select name="usage_type">
+                                <option value="shareable">Shareable</option>
+                                <option value="non_shareable">Non-Shareable</option>
+                            </select>
                         </div>
                     </div>
-                </div>
-                
-                <div class="grid-3" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
-                    <div class="form-group">
-                        <label>Country</label>
-                        <select name="country_code">
-                            <option value="DE">🇩🇪 Germany</option>
-                            <option value="UK">🇬🇧 UK</option>
-                            <option value="IT">🇮🇹 Italy</option>
-                            <option value="US">🇺🇸 United States</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Media Type</label>
-                        <select name="media_type" onchange="const subtype = this.parentElement.nextElementSibling; subtype.style.opacity = this.value === 'social' ? '1' : '0.4'; subtype.style.pointerEvents = this.value === 'social' ? 'auto' : 'none';">
-                            <option value="social">Social Media</option>
-                            <option value="tv">TV / Broadcast</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Usage Type</label>
-                        <select name="usage_type">
-                            <option value="shareable">Shareable (Social Feed)</option>
-                            <option value="non_shareable">Non-Shareable (Paid/YT)</option>
-                        </select>
-                    </div>
-                    <div class="form-group" id="legal-subtype-group">
-                        <label>Post Type (for 9:16)</label>
-                        <select name="sub_type">
-                            <option value="reels"> Reels</option>
-                            <option value="stories"> Stories</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Output Format</label>
-                        <select name="export_format">
-                            <option value="legal_video">Legal Preview Video</option>
-                            <option value="ae_package">🧩 Legal AE Package (ZIP + WAV + JSON + JSX)</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <!-- Position removed per user request: handled by sub_type/ratio -->
-                
-                <!-- Removed per user request -->
-                
-                <button type="submit" class="btn btn-primary" id="legal-submit">
-                    <i class="ph ph-gavel"></i> Add Legal Content
-                </button>
-                
-                <div id="legal-status" class="status-box" style="display: none;"></div>
-            </form>
-        </div>
-        
-        <!-- Master Panel -->
-        <div id="panel-master" class="panel">
-            <h2><i class="ph ph-faders"></i> Video Mastering <span style="font-size: 0.6em; color: var(--accent); font-weight: 400;">AI + Gold POS</span></h2>
 
-            <div class="master-subtabs" style="display: flex; gap: 0.5rem; margin-bottom: 1.25rem;">
-                <button type="button" class="master-subtab active" id="master-subtab-gold" onclick="switchMasterSubtab('gold')"><i class="ph ph-storefront"></i> Burberry Gold POS</button>
-                <button type="button" class="master-subtab" id="master-subtab-ai" onclick="switchMasterSubtab('ai')"><i class="ph ph-video-camera"></i> Scene AI (upload)</button>
-            </div>
-
-            <!-- Gold POS: manifest-driven plan (subset of 160 outputs per VO) -->
-            <div id="master-subpanel-gold" class="master-subpanel">
-                <div class="grid-2" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start;">
-                    <div class="form-group">
-                        <label>Version (VO)</label>
-                        <select id="gold-vo" onchange="goldOnVoChange()">
-                            <option value="vo1">VO1</option>
-                            <option value="vo2">VO2</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Matrix (full grid)</label>
-                        <div id="gold-matrix-hint" style="font-size: 0.85rem; color: var(--text-muted); padding: 0.5rem; background: var(--surface-light); border-radius: 8px;">Loading…</div>
-                    </div>
-                </div>
-                <div id="gold-asset-banner" style="display: none; margin-bottom: 1rem; font-size: 0.82rem; padding: 0.65rem 0.85rem; border-radius: 8px;"></div>
-                <div class="form-group">
-                    <label>Deliverable lines (tick từng dòng cần xử lý)</label>
-                    <div id="gold-lines-wrap" style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 220px; overflow: auto; padding: 0.5rem; background: var(--surface-light); border-radius: 8px; font-size: 0.85rem;"></div>
-                </div>
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
-                    <div class="form-group">
-                        <label>Formats</label>
-                        <div id="gold-formats-wrap" style="display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
-                    </div>
-                    <div class="form-group">
-                        <label>Lengths (s)</label>
-                        <div id="gold-durations-wrap" style="display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
-                    </div>
-                    <div class="form-group">
-                        <label>Export codecs</label>
-                        <div id="gold-codecs-wrap" style="display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
-                    </div>
-                </div>
-                <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center;">
-                    <button type="button" class="btn btn-primary" id="gold-plan-btn" onclick="submitGoldPlan()"><i class="ph ph-list-checks"></i> Preview plan (count + sample)</button>
-                    <button type="button" class="btn btn-primary" id="gold-render-btn" onclick="submitGoldRender()" style="background:var(--success);border:none;"><i class="ph ph-play"></i> Queue render (batch)</button>
-                </div>
-                <div id="gold-plan-status" style="margin-top: 1rem; font-size: 0.9rem; color: var(--text-muted);"></div>
-                <pre id="gold-plan-json" style="display: none; margin-top: 0.75rem; padding: 1rem; background: #0c1222; border-radius: 8px; font-size: 0.75rem; max-height: 320px; overflow: auto; white-space: pre-wrap; word-break: break-all;"></pre>
-            </div>
-
-            <!-- Scene AI: existing upload -->
-            <div id="master-subpanel-ai" class="master-subpanel" style="display: none;">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 0.5rem;">
-                    <div class="form-group">
-                        <label>Video File</label>
-                        <label class="file-upload" id="video-upload-3" style="min-height: 180px;">
-                            <input type="file" id="master-video-input" accept="video/*" onchange="handleFileSelect(this, 'video-upload-3'); updateMasterPreview(this);">
-                            <div class="icon"><i class="ph ph-video-camera"></i></div>
-                            <div>Drag & drop source video</div>
-                        </label>
-                    </div>
-                    <div class="form-group">
-                        <label>Preview</label>
-                        <div id="master-preview-container" style="background: var(--surface-light); border-radius: 12px; min-height: 180px; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid var(--border-color);">
-                            <video id="master-preview-player" controls style="width: 100%; height: 180px; object-fit: contain; display: none;"></video>
-                            <img id="master-preview-img" style="width: 100%; height: 180px; object-fit: contain; display: none;">
-                            <span id="master-preview-placeholder" style="color: var(--text-muted);"><i class="ph ph-film-strip"></i> Preview will appear here</span>
+                    <div class="grid-2" style="margin-top:0.25rem;">
+                        <div class="field" id="legal-subtype-group">
+                            <label>Post Type (9:16)</label>
+                            <select name="sub_type">
+                                <option value="reels">Reels</option>
+                                <option value="stories">Stories</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label>Output Format</label>
+                            <select name="export_format">
+                                <option value="legal_video">Legal Preview Video</option>
+                                <option value="ae_package">🧩 Legal AE Package</option>
+                            </select>
                         </div>
                     </div>
-                </div>
-                <p style="color: var(--text-muted); font-size: 0.9rem;">Dùng video này cho phân tích scene / smart cut / logo (API <code>/api/master/…</code>).</p>
+
+                    <!-- Status Box -->
+                    <div id="legal-status" style="display:none;"></div>
+
+                    <button type="submit" class="btn btn-primary" id="legal-submit">
+                        <i class="ph ph-gavel"></i> Add Legal Content
+                    </button>
+
+                </form>
             </div>
 
-            <style>
-                .master-subtab {
-                    padding: 0.6rem 1rem;
-                    border-radius: 10px;
-                    border: 1px solid var(--surface-light);
-                    background: var(--surface-light);
-                    color: var(--text-muted);
-                    cursor: pointer;
-                    font-size: 0.95rem;
-                    transition: all 0.2s ease;
-                }
-                .master-subtab:hover {
-                    background: var(--surface);
-                }
-                .master-subtab.active {
-                    background: var(--primary);
-                    color: #fff;
-                    border-color: var(--primary);
-                    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-                }
-                
-                /* Premium Styling for Gold Deliverable Lines */
-                .gold-line-row {
-                    transition: all 0.2s ease;
-                    border: 1px solid rgba(255,255,255,0.05) !important;
-                }
-                .gold-line-row:hover {
-                    transform: translateX(4px);
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-                }
-                .gold-line-row.solo-warning {
-                    background: rgba(239, 68, 68, 0.1) !important;
-                    border-color: rgba(239, 68, 68, 0.3) !important;
-                    color: #fca5a5 !important;
-                }
-                .gold-line-not-ready {
-                    background: rgba(239, 68, 68, 0.2);
-                    color: #fca5a5;
-                    font-size: 0.7rem;
-                    padding: 2px 6px;
-                    border-radius: 4px;
-                    text-transform: uppercase;
-                }
-                .status-percent {
-                    background: var(--gradient-primary);
-                    -webkit-background-clip: text;
-                    background-clip: text;
-                    -webkit-text-fill-color: transparent;
-                }
-                .status-compact-step {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                    font-size: 0.85rem;
-                    color: var(--text-muted);
-                    padding: 0.2rem 0;
-                }
-            </style>
+            <!-- ── MASTER PANEL ────────────────────────────── -->
+            <div class="mode-panel" id="panel-master">
 
-            <!-- Master Status (kept for subtitle/legal polling compatibility) -->
-            <div id="master-status" class="status-box" style="display: none; margin-top: 1.5rem;"></div>
-        </div>
+                <!-- Subtabs -->
+                <div style="display:flex;gap:0.4rem;">
+                    <button type="button" class="master-subtab active" id="master-subtab-gold"
+                            onclick="switchMasterSubtab('gold')">
+                        <i class="ph ph-storefront"></i> Gold POS
+                    </button>
+                    <button type="button" class="master-subtab" id="master-subtab-ai"
+                            onclick="switchMasterSubtab('ai')">
+                        <i class="ph ph-video-camera"></i> Scene AI
+                    </button>
+                </div>
+
+                <!-- Gold POS Panel -->
+                <div id="master-subpanel-gold" class="master-subpanel active">
+                    <div class="grid-2">
+                        <div class="field">
+                            <label>Version (VO)</label>
+                            <select id="gold-vo" onchange="goldOnVoChange()">
+                                <option value="vo1">VO1</option>
+                                <option value="vo2">VO2</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label>Matrix</label>
+                            <div id="gold-matrix-hint"
+                                 style="font-size:0.75rem;color:var(--text-muted);padding:0.5rem;background:var(--panel-light);border-radius:8px;border:1px solid var(--border);">
+                                Loading…
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="gold-asset-banner" style="display:none;font-size:0.78rem;padding:0.55rem 0.75rem;border-radius:var(--radius);"></div>
+
+                    <div class="field">
+                        <label>Deliverable Lines</label>
+                        <div id="gold-lines-wrap"
+                             style="display:flex;flex-direction:column;gap:0.3rem;max-height:200px;overflow:auto;padding:0.4rem;background:var(--panel-light);border-radius:var(--radius);border:1px solid var(--border);font-size:0.8rem;">
+                        </div>
+                    </div>
+
+                    <div class="grid-3">
+                        <div class="field">
+                            <label>Formats</label>
+                            <div id="gold-formats-wrap" style="display:flex;flex-wrap:wrap;gap:0.3rem;"></div>
+                        </div>
+                        <div class="field">
+                            <label>Lengths (s)</label>
+                            <div id="gold-durations-wrap" style="display:flex;flex-wrap:wrap;gap:0.3rem;"></div>
+                        </div>
+                        <div class="field">
+                            <label>Codecs</label>
+                            <div id="gold-codecs-wrap" style="display:flex;flex-wrap:wrap;gap:0.3rem;"></div>
+                        </div>
+                    </div>
+
+                    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+                        <button type="button" class="btn btn-ghost btn-sm" id="gold-plan-btn"
+                                onclick="submitGoldPlan()" style="flex:1;">
+                            <i class="ph ph-list-checks"></i> Preview Plan
+                        </button>
+                        <button type="button" class="btn btn-sm" id="gold-render-btn"
+                                onclick="submitGoldRender()"
+                                style="flex:1;background:var(--success);color:#fff;">
+                            <i class="ph ph-play"></i> Queue Render
+                        </button>
+                    </div>
+
+                    <div id="gold-plan-status" style="font-size:0.82rem;color:var(--text-muted);"></div>
+                    <pre id="gold-plan-json" style="display:none;padding:0.75rem;background:#0c1222;border-radius:var(--radius);font-size:0.72rem;max-height:240px;overflow:auto;white-space:pre-wrap;word-break:break-all;"></pre>
+
+                    <!-- Status box for gold render polling -->
+                    <div id="master-status" style="display:none;"></div>
+                </div>
+
+                <!-- Scene AI Panel -->
+                <div id="master-subpanel-ai" class="master-subpanel">
+
+                    <div class="section-label">Source Video</div>
+                    <label class="upload-zone" id="video-upload-3">
+                        <input type="file" id="master-video-input" accept="video/*"
+                               onchange="handleFileSelect(this,'video-upload-3'); updateMasterPreview(this);">
+                        <i class="ph ph-video-camera upload-icon"></i>
+                        <div class="upload-title">Drop video or click to browse</div>
+                        <div class="upload-sub">MP4 · MOV · AVI · MKV</div>
+                        <div class="upload-filename" style="display:none"></div>
+                    </label>
+
+                    <!-- Scene Analysis -->
+                    <div class="tool-card">
+                        <div class="tool-card-header">
+                            <i class="ph ph-scan"></i> Scene Analysis
+                        </div>
+                        <button type="button" class="btn btn-ghost btn-sm" id="btn-analyze"
+                                onclick="analyzeScenes()" style="width:100%;">
+                            <i class="ph ph-scan"></i> Analyze Scenes
+                        </button>
+                        <div id="scene-results" style="display:none;">
+                            <div id="scene-timeline" style="display:flex;gap:0.4rem;overflow-x:auto;padding:0.3rem 0;"></div>
+                        </div>
+                    </div>
+
+                    <!-- Smart Cut -->
+                    <div class="tool-card">
+                        <div class="tool-card-header">
+                            <i class="ph ph-scissors"></i> Smart Cut
+                        </div>
+                        <div class="grid-2">
+                            <label class="checkbox-label"><input type="checkbox" id="sc-intro" checked> Remove Intro</label>
+                            <label class="checkbox-label"><input type="checkbox" id="sc-outro" checked> Remove Outro</label>
+                            <label class="checkbox-label"><input type="checkbox" id="sc-logo"> Remove Logo</label>
+                            <label class="checkbox-label"><input type="checkbox" id="sc-product"> Remove Product</label>
+                        </div>
+                        <button type="button" class="btn btn-ghost btn-sm" id="btn-smartcut"
+                                onclick="smartCut()" disabled style="width:100%;">
+                            <i class="ph ph-scissors"></i> Smart Cut
+                        </button>
+                        <div id="status-smartcut" class="card-status"></div>
+                    </div>
+
+                    <!-- Logo Remove -->
+                    <div class="tool-card">
+                        <div class="tool-card-header">
+                            <i class="ph ph-eraser"></i> Logo Removal
+                        </div>
+                        <button type="button" class="btn btn-ghost btn-sm" id="btn-logo-remove"
+                                onclick="logoRemove()" disabled style="width:100%;">
+                            <i class="ph ph-eraser"></i> Remove Logo (AI)
+                        </button>
+                        <div id="status-logo" class="card-status"></div>
+                    </div>
+
+                    <!-- Logo Replace -->
+                    <div class="tool-card">
+                        <div class="tool-card-header">
+                            <i class="ph ph-image"></i> Logo Replace
+                        </div>
+                        <label class="upload-zone" id="logo-upload-zone" style="min-height:60px;">
+                            <input type="file" id="logo-input" accept="image/*">
+                            <i class="ph ph-image upload-icon" style="font-size:1.2rem;"></i>
+                            <div class="upload-sub">Upload new logo</div>
+                        </label>
+                        <button type="button" class="btn btn-ghost btn-sm" id="btn-replace-logo"
+                                onclick="replaceLogo()" style="width:100%;">
+                            <i class="ph ph-arrows-clockwise"></i> Replace Logo
+                        </button>
+                    </div>
+
+                    <!-- Packshot -->
+                    <div class="tool-card">
+                        <div class="tool-card-header">
+                            <i class="ph ph-package"></i> Add Packshot
+                        </div>
+                        <label class="upload-zone" style="min-height:60px;">
+                            <input type="file" id="packshot-input" accept="image/*">
+                            <i class="ph ph-package upload-icon" style="font-size:1.2rem;"></i>
+                            <div class="upload-sub">Upload packshot image</div>
+                        </label>
+                        <button type="button" class="btn btn-ghost btn-sm" id="btn-packshot"
+                                onclick="addPackshot()" style="width:100%;">
+                            <i class="ph ph-plus-circle"></i> Add Packshot
+                        </button>
+                    </div>
+
+                    <!-- Object Removal Modal Trigger -->
+                    <div class="tool-card">
+                        <div class="tool-card-header">
+                            <i class="ph ph-paint-brush"></i> Object Removal (LaMa AI)
+                        </div>
+                        <button type="button" class="btn btn-ghost btn-sm"
+                                onclick="openModal('modal-inpaint')" style="width:100%;">
+                            <i class="ph ph-paint-brush"></i> Open Inpaint Tool
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+
+        </div><!-- /controls-scroll -->
+    </aside><!-- /controls -->
+
+</div><!-- /workspace -->
+
+<!-- ══ STATUS BAR ═══════════════════════════════════════════ -->
+<footer class="statusbar">
+    <div class="statusbar-label" id="statusbar-label">Ready</div>
+    <div class="statusbar-progress">
+        <div class="fill" id="statusbar-fill" style="width:0%"></div>
     </div>
-    
-    <!-- ==========================================
-         MODAL: Object Removal (LaMa AI)
-         ========================================== -->
-    <div id="modal-inpaint" class="modal-overlay" onclick="if(event.target===this)closeModal('modal-inpaint')">
-        <div class="modal-content">
-            <!-- Header -->
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                <h2 style="margin: 0; color: var(--primary); display: flex; align-items: center; gap: 0.5rem;">
-                    <i class="ph ph-paint-brush"></i> Object Removal (LaMa AI)
-                </h2>
-                <button onclick="closeModal('modal-inpaint')" style="background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.5rem;">&times;</button>
-            </div>
+    <div class="statusbar-percent" id="statusbar-percent"></div>
+    <div class="statusbar-actions" id="statusbar-actions"></div>
+</footer>
 
-            <!-- Tab Switcher -->
-            <div class="modal-tabs">
-                <div id="m-tab-image" class="modal-tab active" onclick="switchModalTab('image')">🖌️ Image Inpaint</div>
-                <div id="m-tab-video" class="modal-tab" onclick="switchModalTab('video')">📹 Video Inpaint</div>
-            </div>
+<!-- ══ TOAST CONTAINER ══════════════════════════════════════ -->
+<div id="toast-container" class="toast-container"></div>
 
-            <!-- Tab Panel: Image -->
-            <div id="m-panel-image" class="modal-panel active">
-                <div style="display: grid; grid-template-columns: 1fr 300px; gap: 2rem;">
-                    <div class="canvas-container">
-                        <canvas id="inpaint-canvas"></canvas>
-                        <div id="inpaint-placeholder" style="height: 400px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-muted);">
-                            <i class="ph ph-image" style="font-size: 3rem; margin-bottom: 1rem;"></i>
-                            <p>Upload một ảnh để bắt đầu vẽ mask</p>
-                        </div>
+<!-- ══ MODAL: Object Removal (LaMa AI) ══════════════════════ -->
+<div id="modal-inpaint" class="modal-overlay" onclick="if(event.target===this)closeModal('modal-inpaint')">
+    <div class="modal-content">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;">
+            <h2 style="margin:0;color:var(--primary);display:flex;align-items:center;gap:0.5rem;font-size:1.1rem;">
+                <i class="ph ph-paint-brush"></i> Object Removal (LaMa AI)
+            </h2>
+            <button onclick="closeModal('modal-inpaint')"
+                    style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1.4rem;">&times;</button>
+        </div>
+
+        <div class="modal-tabs">
+            <div id="m-tab-image" class="modal-tab active" onclick="switchModalTab('image')">🖌️ Image Inpaint</div>
+            <div id="m-tab-video" class="modal-tab" onclick="switchModalTab('video')">📹 Video Inpaint</div>
+        </div>
+
+        <!-- Image Inpaint -->
+        <div id="m-panel-image" class="modal-panel active">
+            <div style="display:grid;grid-template-columns:1fr 300px;gap:1.5rem;">
+                <div class="canvas-container">
+                    <canvas id="inpaint-canvas"></canvas>
+                    <div id="inpaint-placeholder"
+                         style="height:380px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--text-muted);">
+                        <i class="ph ph-image" style="font-size:3rem;margin-bottom:1rem;"></i>
+                        <p>Upload an image to start drawing mask</p>
                     </div>
-                    <div style="display: flex; flex-direction: column; gap: 1rem;">
-                        <div class="form-group">
-                            <label>1. Upload Ảnh</label>
-                            <label class="file-upload" id="upload-label-inpaint">
-                                <input type="file" id="m-inpaint-upload" accept="image/*">
-                                <i class="ph ph-plus" style="font-size: 1.5rem;"></i>
-                            </label>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:0.75rem;">
+                    <div class="field">
+                        <label>1. Upload Image</label>
+                        <label class="upload-zone" id="upload-label-inpaint" style="min-height:80px;">
+                            <input type="file" id="m-inpaint-upload" accept="image/*">
+                            <i class="ph ph-plus upload-icon" style="font-size:1.4rem;"></i>
+                        </label>
+                    </div>
+                    <div class="field">
+                        <label>2. Brush Size: <span id="brush-size-val">25</span></label>
+                        <input type="range" id="brush-size" min="5" max="100" value="25" style="width:100%;accent-color:var(--primary);">
+                    </div>
+                    <button id="btn-m-clear" class="btn btn-ghost" style="width:100%;">
+                        <i class="ph ph-trash"></i> Clear Mask
+                    </button>
+                    <button id="btn-m-inpaint" class="btn btn-primary" style="width:100%;" disabled>
+                        <i class="ph ph-paint-brush"></i> Remove Object
+                    </button>
+                    <div id="m-result-area" style="display:none;margin-top:0.5rem;">
+                        <label style="font-size:0.75rem;color:var(--text-muted);">Result:</label>
+                        <img id="m-result-img" style="width:100%;border-radius:var(--radius);border:1px solid var(--primary);margin-top:0.3rem;">
+                        <a id="m-download-link" download
+                           class="btn btn-success"
+                           style="width:100%;justify-content:center;margin-top:0.5rem;text-decoration:none;">
+                            <i class="ph ph-download"></i> Download
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Video Inpaint -->
+        <div id="m-panel-video" class="modal-panel">
+            <div style="display:grid;grid-template-columns:1fr 280px;gap:1.5rem;">
+                <div class="canvas-container">
+                    <canvas id="video-inpaint-canvas"></canvas>
+                    <div id="v-inpaint-placeholder"
+                         style="height:300px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--text-muted);">
+                        <i class="ph ph-video" style="font-size:3rem;margin-bottom:1rem;"></i>
+                        <p>Upload a video to extract frame for masking</p>
+                    </div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:0.75rem;">
+                    <div class="field">
+                        <label>1. Upload Video</label>
+                        <label class="upload-zone" id="v-upload-label-inpaint" style="min-height:80px;">
+                            <input type="file" id="m-video-upload" accept="video/*">
+                            <i class="ph ph-plus upload-icon" style="font-size:1.4rem;"></i>
+                        </label>
+                    </div>
+                    <div class="field">
+                        <label>Brush Size: <span id="v-brush-size-val">25</span></label>
+                        <input type="range" id="v-brush-size" min="5" max="100" value="25" style="width:100%;accent-color:var(--primary);">
+                    </div>
+                    <button id="btn-v-clear" class="btn btn-ghost" style="width:100%;">
+                        <i class="ph ph-trash"></i> Clear Mask
+                    </button>
+                    <button id="btn-v-inpaint" class="btn btn-primary" style="width:100%;" disabled>
+                        <i class="ph ph-film-strip"></i> Process Video
+                    </button>
+                    <div id="v-status-area" style="display:none;margin-top:0.5rem;">
+                        <div style="font-size:0.8rem;font-weight:600;">Processing...</div>
+                        <div class="progress-bar" style="margin:0.4rem 0;">
+                            <div id="v-progress-fill" class="fill" style="width:0%"></div>
                         </div>
-                        <div class="form-group">
-                            <label>2. Cọ vẽ (Brush Size): <span id="brush-size-val">25</span></label>
-                            <input type="range" id="brush-size" min="5" max="100" value="25" style="width: 100%;">
-                        </div>
-                        <button id="btn-m-clear" class="btn" style="width: 100%; justify-content: center; background: var(--surface-light);">
-                            <i class="ph ph-trash"></i> Xóa Mask
-                        </button>
-                        <button id="btn-m-inpaint" class="btn btn-primary" style="width: 100%; justify-content: center;" disabled>
-                            <i class="ph ph-paint-brush"></i> Xóa Đối Tượng
-                        </button>
-                        
-                        <div id="m-result-area" style="display: none; margin-top: 1rem;">
-                            <label>Kết quả:</label>
-                            <img id="m-result-img" style="width: 100%; border-radius: 8px; border: 1px solid var(--primary);">
-                            <a id="m-download-link" download class="btn" style="width: 100%; justify-content: center; margin-top: 0.5rem; background: var(--success); color: white; text-decoration: none;">
-                                <i class="ph ph-download"></i> Download
+                        <div id="v-result-area" style="display:none;margin-top:0.5rem;">
+                            <video id="v-result-preview" controls style="width:100%;border-radius:var(--radius);"></video>
+                            <a id="v-download-link" download
+                               class="btn btn-success"
+                               style="width:100%;justify-content:center;margin-top:0.5rem;text-decoration:none;">
+                                <i class="ph ph-download"></i> Download Video
                             </a>
                         </div>
                     </div>
                 </div>
             </div>
-
-            <!-- Tab Panel: Video -->
-            <div id="m-panel-video" class="modal-panel">
-                <div style="display: grid; grid-template-columns: 1fr 300px; gap: 2rem;">
-                    <div class="canvas-container">
-                        <canvas id="video-inpaint-canvas"></canvas>
-                        <div id="v-inpaint-placeholder" style="height: 400px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-muted);">
-                            <i class="ph ph-video" style="font-size: 3rem; margin-bottom: 1rem;"></i>
-                            <p>Upload video để trích xuất frame vẽ mask</p>
-                        </div>
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 1rem;">
-                        <div class="form-group">
-                            <label>1. Upload Video</label>
-                            <label class="file-upload" id="v-upload-label-inpaint">
-                                <input type="file" id="m-video-upload" accept="video/*">
-                                <i class="ph ph-plus" style="font-size: 1.5rem;"></i>
-                            </label>
-                        </div>
-                        <div class="form-group">
-                            <label>Brush Size: <span id="v-brush-size-val">25</span></label>
-                            <input type="range" id="v-brush-size" min="5" max="100" value="25" style="width: 100%;">
-                        </div>
-                        <button id="btn-v-clear" class="btn" style="width: 100%; justify-content: center; background: var(--surface-light);">
-                            <i class="ph ph-trash"></i> Xóa Mask
-                        </button>
-                        <button id="btn-v-inpaint" class="btn btn-primary" style="width: 100%; justify-content: center;" disabled>
-                            <i class="ph ph-film-strip"></i> Xử lý Video
-                        </button>
-                        
-                        <div id="v-status-area" style="display: none; margin-top: 1rem;">
-                            <h3>Processing...</h3>
-                            <div class="progress-bar">
-                                <div id="v-progress-fill" class="fill" style="width: 0%"></div>
-                            </div>
-                            <div id="v-result-area" style="display: none; margin-top: 1rem;">
-                                <video id="v-result-preview" controls style="width: 100%; border-radius: 8px;"></video>
-                                <a id="v-download-link" download class="btn" style="width: 100%; justify-content: center; margin-top: 0.5rem; background: var(--success); color: white; text-decoration: none;">
-                                    <i class="ph ph-download"></i> Download Video
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
+</div>
 
-    <footer class="footer">
-    </footer>
-    
-    <script>
-        function switchTab(tabName) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-            
-            event.target.classList.add('active');
-            document.getElementById('panel-' + tabName).classList.add('active');
-            if (tabName === 'master' && typeof loadGoldManifest === 'function') {
-                loadGoldManifest();
-            }
-        }
-        
-        let currentInputMode = 'auto';
-        let translationLangs = ['en', 'fr', 'es', 'nl', 'ja'];
-        
-        function switchInputMode(mode) {
-            currentInputMode = mode;
-            
-            // Toggle tabs
-            document.querySelectorAll('.input-tab').forEach(t => t.classList.remove('active'));
-            // Note: event is deprecated, better use event arg but keeping context
-            if (window.event) window.event.target.classList.add('active');
-            
-            // Toggle content
-            document.getElementById('text-input').classList.remove('active');
-            const autoInput = document.getElementById('auto-input');
-            if (autoInput) autoInput.classList.remove('active');
-            
-            const target = document.getElementById(mode + '-input');
-            if (target) target.classList.add('active');
+<!-- ══ HIDDEN: batch / export status boxes (legacy, kept for JS compat) ══ -->
+<div id="batch-status" style="display:none;"></div>
+<div id="export-status" style="display:none;"></div>
 
-            // In manual Excel mode, target languages are auto-detected from table columns.
-            const langGroup = document.getElementById('target-language-group');
-            if (langGroup) {
-                langGroup.style.display = mode === 'text' ? 'none' : '';
-            }
-        }
-
-        async function handleTranslationExcel(input) {
-            if (input.files.length === 0) return;
-            
-            const file = input.files[0];
-            const formData = new FormData();
-            formData.append('file', file);
-            
-            const uploadContainer = document.getElementById('excel-upload-container');
-            const oldContent = uploadContainer.innerHTML;
-            uploadContainer.innerHTML = '<i class="ph ph-circle-notch ph-spin" style="font-size: 2rem; color: var(--primary);"></i><div style="margin-top:0.5rem">Parsing Excel...</div>';
-            
-            try {
-                const res = await fetch('/api/parse-translation-excel', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                if (res.ok) {
-                    const data = await res.json();
-                    renderTranslationTable(data.rows);
-                    uploadContainer.style.display = 'none';
-                    document.getElementById('translation-table-container').style.display = 'block';
-                } else {
-                    alert('Failed to parse Excel file.');
-                    uploadContainer.innerHTML = oldContent;
-                }
-            } catch (e) {
-                console.error(e);
-                alert('Connection error.');
-                uploadContainer.innerHTML = oldContent;
-            }
-        }
-
-        function renderTranslationTable(rows) {
-            const tbody = document.querySelector('#translation-table tbody');
-            tbody.innerHTML = '';
-            const theadRow = document.querySelector('#translation-table thead tr');
-            if (theadRow) {
-                const detectedLangs = rows && rows.length
-                    ? Object.keys(rows.reduce((acc, row) => Object.assign(acc, row || {}), {}))
-                    : [];
-                translationLangs = (detectedLangs.length ? detectedLangs : ['en', 'fr', 'es', 'nl', 'ja'])
-                    .map(l => String(l || '').trim().toLowerCase())
-                    .filter(Boolean);
-
-                let headerHtml = '<th style="padding: 0.8rem; text-align: left; width: 40px;">#</th>';
-                translationLangs.forEach((lang, idx) => {
-                    const label = idx === 0 ? `${lang.toUpperCase()} (Source)` : lang.toUpperCase();
-                    headerHtml += `<th style="padding: 0.8rem; text-align: left;">${label}</th>`;
-                });
-                headerHtml += '<th style="padding: 0.8rem; text-align: center; width: 80px;">Action</th>';
-                theadRow.innerHTML = headerHtml;
-            }
-            
-            if (!rows || rows.length === 0) {
-                addTranslationRow();
-                return;
-            }
-            
-            rows.forEach((row, idx) => {
-                addTranslationRow(row, idx + 1);
-            });
-        }
-
-        function reindexTranslationRows() {
-            const rows = document.querySelectorAll('#translation-table tbody tr');
-            rows.forEach((row, idx) => {
-                const indexCell = row.querySelector('[data-row-index]');
-                if (indexCell) indexCell.textContent = String(idx + 1);
-            });
-        }
-
-        function removeTranslationRow(btn) {
-            const row = btn.closest('tr');
-            if (!row) return;
-
-            row.remove();
-            const tbody = document.querySelector('#translation-table tbody');
-            if (tbody.children.length === 0) {
-                addTranslationRow();
-            } else {
-                reindexTranslationRows();
-            }
-        }
-
-        function addTranslationRow(data = {}, index = null) {
-            const tbody = document.querySelector('#translation-table tbody');
-            const rowCount = index || (tbody.children.length + 1);
-            const tr = document.createElement('tr');
-            tr.style.borderBottom = '1px solid var(--border-color)';
-            
-            const langs = translationLangs && translationLangs.length ? translationLangs : ['en', 'fr', 'es', 'nl', 'ja'];
-            let html = `<td data-row-index style="padding: 0.8rem; color: var(--text-muted); font-weight: 500;">${rowCount}</td>`;
-            
-            langs.forEach(lang => {
-                const text = data[lang] || '';
-                html += `<td contenteditable="true" data-lang="${lang}" style="padding: 0.8rem; border-left: 1px solid var(--border-color); outline: none; min-width: 150px;">${text}</td>`;
-            });
-
-            html += `
-                <td style="padding: 0.6rem; border-left: 1px solid var(--border-color); text-align: center;">
-                    <button type="button" class="btn btn-sm" onclick="removeTranslationRow(this)" style="background: rgba(245, 87, 108, 0.15); color: #f5576c; border: 1px solid rgba(245, 87, 108, 0.35);">
-                        <i class="ph ph-trash"></i>
-                    </button>
-                </td>
-            `;
-            
-            tr.innerHTML = html;
-            tbody.appendChild(tr);
-            reindexTranslationRows();
-            
-            // Auto focus if empty row
-            const firstLang = langs[0];
-            if (firstLang && !data[firstLang]) {
-                const firstCell = tr.querySelector(`[data-lang="${firstLang}"]`);
-                if (firstCell) firstCell.focus();
-            }
-        }
-
-        function toggleSubtitleSettings() {
-            const content = document.getElementById('subtitle-settings');
-            const header = document.querySelector('.settings-header');
-            content.classList.toggle('collapsed');
-            header.classList.toggle('collapsed');
-        }
-        
-        function detectFormat(width, height) {
-            const ratio = width / height;
-            if (ratio > 1.7) return '16x9';      // 16:9 is 1.77
-            if (ratio < 0.6) return '9x16';      // 9:16 is 0.56
-            if (ratio > 0.7 && ratio < 0.9) return '4x5'; // 4:5 is 0.8
-            if (ratio > 0.9 && ratio < 1.1) return '1x1'; // 1:1 is 1.0
-            return '16x9'; // Fallback
-        }
-
-        async function fetchThumbnail(file, imgEl, videoEl, placeholderEl) {
-            placeholderEl.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Generating preview...';
-            placeholderEl.style.display = 'flex';
-            imgEl.style.display = 'none';
-            videoEl.style.display = 'none';
-
-            const formData = new FormData();
-            formData.append('video', file);
-            try {
-                const res = await fetch('/api/video-thumbnail', { method: 'POST', body: formData });
-                if (res.ok) {
-                    const width = parseInt(res.headers.get('X-Video-Width'));
-                    const height = parseInt(res.headers.get('X-Video-Height'));
-                    
-                    const blob = await res.blob();
-                    imgEl.src = URL.createObjectURL(blob);
-                    imgEl.style.display = 'block';
-                    placeholderEl.style.display = 'none';
-                    return { width, height };
-                } else {
-                    placeholderEl.innerHTML = '<i class="ph ph-warning-circle"></i> No preview available';
-                }
-            } catch (e) {
-                placeholderEl.innerHTML = '<i class="ph ph-warning-circle"></i> Preview error';
-            }
-            return null;
-        }
-
-        async function updatePreview(input) {
-            if (input.files.length > 0) {
-                const file = input.files[0];
-                const player = document.getElementById('preview-player');
-                const img = document.getElementById('preview-img');
-                const placeholder = document.getElementById('preview-placeholder');
-                const formatInput = document.querySelector('[name="video_format"]');
-                
-                const ext = file.name.split('.').pop().toLowerCase();
-                const isMov = ext === 'mov' || ext === 'qt';
-
-                if (isMov) {
-                    // Instant response for .mov files by skipping heavy thumbnail generation
-                    player.style.display = 'none';
-                    img.style.display = 'none';
-                    placeholder.style.display = 'flex';
-                    placeholder.innerHTML = '<i class="ph ph-file-video" style="font-size: 3rem; color: var(--primary);"></i><div style="margin-top:0.5rem">MOV File Selected (Ready)</div>';
-                    
-                    // Note: Format detection for .mov will happen on the backend during processing
-                } else {
-                    const videoUrl = URL.createObjectURL(file);
-                    player.src = videoUrl;
-                    player.style.display = 'block';
-                    img.style.display = 'none';
-                    placeholder.style.display = 'none';
-                    
-                    // Get dimensions for standard videos
-                    const tempVideo = document.createElement('video');
-                    tempVideo.src = videoUrl;
-                    tempVideo.onloadedmetadata = () => {
-                        if (formatInput) {
-                            formatInput.value = detectFormat(tempVideo.videoWidth, tempVideo.videoHeight);
-                        }
-                    };
-                }
-                clearSubResults();
-            }
-        }
-
-        function clearSubResults() {
-            ['subtitle-status', 'batch-status', 'export-status'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) {
-                    el.style.display = 'none';
-                    el.innerHTML = '';
-                }
-            });
-        }
-
-        function clearLegalResults() {
-            ['legal-status'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) {
-                    el.style.display = 'none';
-                    el.innerHTML = '';
-                }
-            });
-        }
-        
-        async function handleFileSelect(input, uploadId) {
-            const upload = document.getElementById(uploadId);
-            if (input.files.length > 0) {
-                upload.classList.add('has-file');
-                upload.querySelector('div:last-child').textContent = input.files[0].name;
-                
-                // Update preview for Legal panel
-                if (uploadId === 'video-upload-2') {
-                    const player = document.getElementById('legal-video-player');
-                    const img = document.getElementById('legal-video-img');
-                    const placeholder = document.getElementById('legal-video-placeholder');
-                    
-                    const file = input.files[0];
-                    const ext = file.name.split('.').pop().toLowerCase();
-                    const isMov = ext === 'mov' || ext === 'qt';
-
-                    if (isMov) {
-                        const dims = await fetchThumbnail(file, img, player, placeholder);
-                        if (dims) {
-                            const format = detectFormat(dims.width, dims.height);
-                            const mediaSelect = document.querySelector('#legal-form select[name="media_type"]');
-                            const usageSelect = document.querySelector('#legal-form select[name="usage_type"]');
-                            if (mediaSelect && format === '9x16') {
-                                mediaSelect.value = 'social';
-                                if (usageSelect) usageSelect.value = 'shareable';
-                            }
-                            // Hide "Post Type" if not 9x16
-                            const subtypeGroup = document.getElementById('legal-subtype-group');
-                            if (subtypeGroup) {
-                                subtypeGroup.style.display = format === '9x16' ? 'block' : 'none';
-                            }
-                        }
-                    } else {
-                        const videoUrl = URL.createObjectURL(file);
-                        player.src = videoUrl;
-                        player.style.display = 'block';
-                        img.style.display = 'none';
-                        if (placeholder) placeholder.style.display = 'none';
-                        
-                        const tempVideo = document.createElement('video');
-                        tempVideo.src = videoUrl;
-                        tempVideo.onloadedmetadata = () => {
-                            const format = detectFormat(tempVideo.videoWidth, tempVideo.videoHeight);
-                            const mediaSelect = document.querySelector('#legal-form select[name="media_type"]');
-                            if (mediaSelect && format === '9x16') {
-                                mediaSelect.value = 'social'; // Auto-select social for vertical videos
-                            }
-                            // Hide "Post Type" if not 9x16
-                            const subtypeGroup = document.getElementById('legal-subtype-group');
-                            if (subtypeGroup) {
-                                subtypeGroup.style.display = format === '9x16' ? 'block' : 'none';
-                            }
-                        };
-                    }
-                    clearLegalResults();
-                }
-            }
-        }
-
-        function setupVideoDropZone(uploadId, inputSelector, onSelected) {
-            const upload = document.getElementById(uploadId);
-            if (!upload) return;
-            const input = upload.querySelector(inputSelector);
-            if (!input) return;
-
-            const preventDefaults = (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-            };
-
-            ["dragenter", "dragover", "dragleave", "drop"].forEach(eventName => {
-                upload.addEventListener(eventName, preventDefaults);
-            });
-
-            ["dragenter", "dragover"].forEach(eventName => {
-                upload.addEventListener(eventName, () => upload.classList.add("drag-over"));
-            });
-
-            ["dragleave", "drop"].forEach(eventName => {
-                upload.addEventListener(eventName, () => upload.classList.remove("drag-over"));
-            });
-
-            upload.addEventListener("drop", (e) => {
-                const files = e.dataTransfer?.files;
-                if (!files || files.length === 0) return;
-
-                const file = files[0];
-                if (!file.type || !file.type.startsWith("video/")) {
-                    if (typeof showToast === "function") {
-                        showToast("Please drop a video file.", "error");
-                    }
-                    return;
-                }
-
-                const dataTransfer = new DataTransfer();
-                dataTransfer.items.add(file);
-                input.files = dataTransfer.files;
-
-                handleFileSelect(input, uploadId);
-                if (typeof onSelected === "function") {
-                    onSelected(input);
-                }
-            });
-        }
-
-        function setupExcelDropZone(containerId, inputId) {
-            const container = document.getElementById(containerId);
-            const input = document.getElementById(inputId);
-            if (!container || !input) return;
-
-            const preventDefaults = (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-            };
-
-            ["dragenter", "dragover", "dragleave", "drop"].forEach(eventName => {
-                container.addEventListener(eventName, preventDefaults);
-            });
-
-            ["dragenter", "dragover"].forEach(eventName => {
-                container.addEventListener(eventName, () => container.classList.add("drag-over"));
-            });
-
-            ["dragleave", "drop"].forEach(eventName => {
-                container.addEventListener(eventName, () => container.classList.remove("drag-over"));
-            });
-
-            container.addEventListener("drop", (e) => {
-                const files = e.dataTransfer?.files;
-                if (!files || files.length === 0) return;
-
-                const file = files[0];
-                const name = (file.name || "").toLowerCase();
-                const isExcel = name.endsWith(".xlsx") || name.endsWith(".xls") || name.endsWith(".csv");
-                if (!isExcel) {
-                    if (typeof showToast === "function") {
-                        showToast("Please drop an Excel/CSV file.", "error");
-                    }
-                    return;
-                }
-
-                const dataTransfer = new DataTransfer();
-                dataTransfer.items.add(file);
-                input.files = dataTransfer.files;
-                handleTranslationExcel(input);
-            });
-        }
-        
-        async function submitSubtitle(e) {
-            e.preventDefault();
-            const form = e.target;
-            const formData = new FormData(form);
-
-            // Require a non-empty video file before sending request.
-            const videoInput = form.querySelector('input[name="video"]');
-            const videoFile = videoInput && videoInput.files && videoInput.files[0] ? videoInput.files[0] : null;
-            if (!videoFile || !videoFile.size) {
-                alert('Please select a valid video file before generating subtitles.');
-                return;
-            }
-            
-            // 1. Handle Target Languages
-            const selectedLangs = [];
-            form.querySelectorAll('input[name^="lang_"]:checked').forEach(cb => {
-                selectedLangs.push(cb.value);
-            });
-            formData.set('target_languages', selectedLangs.join(','));
-            
-            // 2. Handle Export Flags
-            // Video is always exported; SRT is auto-enabled for AE package mode.
-            const exportFormat = form.querySelector('select[name="export_format"]')?.value || 'mp4_standard';
-            formData.set('export_video', true);
-            formData.set('export_srt', exportFormat === 'ae_package');
-            
-            // Determine endpoint based on input mode
-            let endpoint = '/api/subtitle';
-            
-            if (currentInputMode === 'text') {
-                const rows = document.querySelectorAll('#translation-table tbody tr');
-                const langs = translationLangs && translationLangs.length ? translationLangs : ['en'];
-                const translations = {};
-                const nonEmptyByLang = {};
-                langs.forEach(lang => {
-                    translations[lang] = [];
-                    nonEmptyByLang[lang] = 0;
-                });
-                
-                let hasData = false;
-                rows.forEach(row => {
-                    const cells = row.querySelectorAll('[data-lang]');
-                    cells.forEach(cell => {
-                        const lang = cell.getAttribute('data-lang');
-                        const text = cell.innerText.trim();
-                        translations[lang].push(text);
-                        if (text) {
-                            hasData = true;
-                            if (Object.prototype.hasOwnProperty.call(nonEmptyByLang, lang)) {
-                                nonEmptyByLang[lang] += 1;
-                            }
-                        }
-                    });
-                });
-                
-                if (!hasData) {
-                    alert('Please upload an Excel file or enter some translations in the table!');
-                    return;
-                }
-
-                // In manual Excel mode, auto-export all languages that actually have content.
-                const autoTargetLangs = Object.keys(translations).filter(lang => (nonEmptyByLang[lang] || 0) > 0);
-                if (autoTargetLangs.length === 0) {
-                    alert('No language columns with content were found in the table.');
-                    return;
-                }
-                formData.set('target_languages', autoTargetLangs.join(','));
-                
-                formData.set('manual_translations_json', JSON.stringify(translations));
-                // Use the first populated language column as source for timing sync.
-                const sourceLang = autoTargetLangs.includes('en') ? 'en' : autoTargetLangs[0];
-                formData.set('source_lang', sourceLang);
-                formData.set('subtitle_text', (translations[sourceLang] || []).join('\n'));
-                
-                // Force rhythm-aware alignment for manual text mode.
-                formData.set('auto_segment_rhythm', true);
-                endpoint = '/api/subtitle-text';
-            }
-            
-            document.getElementById('subtitle-submit').disabled = true;
-            const statusBox = document.getElementById('subtitle-status');
-            statusBox.style.display = 'block';
-            
-            const updateUI = (pct, msg, icon = 'ph-circle-notch ph-spin') => {
-                statusBox.innerHTML = `
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
-                        <h3 style="margin: 0; font-size: 1rem;">Processing Status</h3>
-                        <span class="status-percent" style="font-size: 1.1rem;">${pct}%</span>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="fill" style="width: ${pct}%"></div>
-                    </div>
-                    <div class="status-text">
-                        <span class="status-label">
-                            <i class="ph ${icon}"></i> ${msg}
-                        </span>
-                    </div>
-                `;
-            };
-
-            updateUI(0, 'Preparing upload...');
-
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', endpoint);
-
-            xhr.upload.onprogress = (e) => {
-                if (e.lengthComputable) {
-                    const pct = Math.round((e.loaded / e.total) * 100);
-                    // Use a smaller range (0-90) for upload to leave room for backend
-                    const displayPct = Math.round(pct * 0.2); // Just 20% for upload phase
-                    updateUI(displayPct, `Uploading video (${pct}%)...`);
-                }
-            };
-
-            xhr.onload = () => {
-                if (xhr.status >= 200 && xhr.status < 300) {
-                    const data = JSON.parse(xhr.responseText);
-                    if (data.job_id) {
-                        pollJobStatus(data.job_id, 'subtitle-status');
-                    }
-                } else {
-                    let errorMsg = 'Backend error';
-                    try {
-                        const err = JSON.parse(xhr.responseText);
-                        errorMsg = err.detail || errorMsg;
-                    } catch(e) {}
-                    alert('Error: ' + errorMsg);
-                    document.getElementById('subtitle-submit').disabled = false;
-                }
-            };
-
-            xhr.onerror = () => {
-                alert('Network error during upload');
-                document.getElementById('subtitle-submit').disabled = false;
-            };
-
-            xhr.send(formData);
-        }
-        
-        async function submitBatch(e) {
-            e.preventDefault();
-            const form = e.target;
-            const formData = new FormData(form);
-            
-            // Collect selected languages
-            const selectedLangs = [];
-            document.querySelectorAll('#batch-form input[type="checkbox"]:checked').forEach(cb => {
-                selectedLangs.push(cb.value);
-            });
-            
-            if (selectedLangs.length === 0) {
-                alert('Please select at least one language to translate!');
-                return;
-            }
-            
-            // Remove individual checkboxes and add combined string
-            document.querySelectorAll('#batch-form input[type="checkbox"]').forEach(cb => {
-                formData.delete(cb.name);
-            });
-            formData.append('target_languages', selectedLangs.join(','));
-            
-            document.getElementById('batch-submit').disabled = true;
-            document.getElementById('batch-status').style.display = 'block';
-            
-            try {
-                const response = await fetch('/api/subtitle-batch', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-                
-                if (data.job_id) {
-                    pollJobStatus(data.job_id, 'batch-status');
-                }
-            } catch (error) {
-                alert('Lỗi: ' + error.message);
-                document.getElementById('batch-submit').disabled = false;
-            }
-        }
-        
-        async function submitExport(e) {
-            e.preventDefault();
-            const form = e.target;
-            const formData = new FormData(form);
-            
-            document.getElementById('export-submit').disabled = true;
-            document.getElementById('export-status').style.display = 'block';
-            
-            try {
-                const response = await fetch('/api/subtitle-export', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-                
-                if (data.job_id) {
-                    pollJobStatus(data.job_id, 'export-status');
-                }
-            } catch (error) {
-                alert('Error: ' + error.message);
-                document.getElementById('export-submit').disabled = false;
-            }
-        }
-        
-        async function submitLegal(e) {
-            e.preventDefault();
-            const form = e.target;
-            const formData = new FormData(form);
-            
-            const submitBtn = document.getElementById('legal-submit');
-            const statusBox = document.getElementById('legal-status');
-            
-            submitBtn.disabled = true;
-            statusBox.style.display = 'block';
-            statusBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            
-            statusBox.innerHTML = `
-                <div style="background: var(--surface-light); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--border-color); animation: fadeIn 0.3s ease-out;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
-                        <h3 style="margin: 0; font-size: 1rem; color: var(--primary);">Processing Status</h3>
-                        <span class="status-percent" style="font-size: 1.1rem; font-weight: 700;">0%</span>
-                    </div>
-                    <div class="progress-bar" style="background: rgba(255,255,255,0.05); height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 1rem;">
-                        <div class="fill" style="width: 0%; height: 100%; background: var(--gradient-primary); transition: width 0.3s ease;"></div>
-                    </div>
-                    <div class="status-text">
-                        <span class="status-label" style="color: var(--text-muted); font-size: 0.9rem;"><i class="ph ph-spinner ph-spin"></i> Initializing video upload...</span>
-                    </div>
-                </div>
-            `;
-            
-            try {
-                const response = await fetch('/api/legal', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-                
-                if (data.job_id) {
-                    pollJobStatus(data.job_id, 'legal-status');
-                } else {
-                    statusBox.innerHTML = '<i class="ph ph-x-circle"></i> Error: No job ID returned';
-                    submitBtn.disabled = false;
-                }
-            } catch (error) {
-                statusBox.innerHTML = '<i class="ph ph-x-circle"></i> Connection Error: ' + error.message;
-                submitBtn.disabled = false;
-            }
-        }
-        
-        // === Mastering AI Functions ===
-        let currentSceneJobId = null;
-
-        let goldManifestLoaded = false;
-        let goldManifestData = null;
-
-        function switchMasterSubtab(which) {
-            const g = document.getElementById('master-subtab-gold');
-            const a = document.getElementById('master-subtab-ai');
-            if (g) g.classList.toggle('active', which === 'gold');
-            if (a) a.classList.toggle('active', which === 'ai');
-            const pg = document.getElementById('master-subpanel-gold');
-            const pa = document.getElementById('master-subpanel-ai');
-            if (pg) pg.style.display = which === 'gold' ? 'block' : 'none';
-            if (pa) pa.style.display = which === 'ai' ? 'block' : 'none';
-            if (which === 'gold') loadGoldManifest();
-        }
-
-        async function loadGoldManifest() {
-            const hint = document.getElementById('gold-matrix-hint');
-            try {
-                const r = await fetch('/api/mastering/gold-manifest');
-                if (!r.ok) throw new Error(await r.text());
-                goldManifestData = await r.json();
-                goldManifestLoaded = true;
-                const m = goldManifestData.matrix || {};
-                if (hint) {
-                    hint.innerHTML = `<strong>${m.content_variants_per_vo || '—'}</strong> nội dung/VO (8 lines×4×5) → <strong>${m.file_outputs_per_vo || m.outputs_per_vo || '—'}</strong> file/VO (×${m.codecs || 2} codec) · cả hai VO: <strong>${m.outputs_total_both_vo || '—'}</strong> file`;
-                }
-                renderGoldFilters();
-                renderGoldAssetBanner();
-                renderGoldLines();
-            } catch (e) {
-                if (hint) hint.textContent = 'Could not load manifest: ' + e.message;
-            }
-        }
-
-        function _goldChipHtml(ok, innerLabel, inputName, inputValue, checked) {
-            const st = ok
-                ? 'background:#ffffff;color:#0f172a;border:1px solid #e2e8f0;'
-                : 'background:#b91c1c;color:#f8fafc;border:1px solid #7f1d1d;';
-            const dis = ok ? '' : ' disabled';
-            const chk = ok && checked ? ' checked' : '';
-            const suf = ok ? '' : '<span style="font-weight:700;margin-left:0.25rem;">không đủ</span>';
-            return '<label class="checkbox-label" style="display:inline-flex;align-items:center;flex-wrap:wrap;gap:0.25rem;padding:0.35rem 0.5rem;border-radius:8px;cursor:' + (ok ? 'pointer' : 'not-allowed') + ';' + st + '">' +
-                '<input type="checkbox" name="' + inputName + '" value="' + inputValue + '"' + chk + dis + '>' +
-                innerLabel + suf + '</label>';
-        }
-
-        function renderGoldAssetBanner() {
-            const el = document.getElementById('gold-asset-banner');
-            if (!el || !goldManifestData || !goldManifestData.asset_flags) return;
-            const af = goldManifestData.asset_flags;
-            const bad = [];
-            if (!af.opening_ok) bad.push('Opening');
-            if (!af.full_video_ok) bad.push('Full video');
-            if (!af.closing_duo_ok) bad.push('Closing duo 16:9');
-            if (af.closing_solo_placeholder) bad.push('Closing solo (chưa file riêng, đang trùng duo)');
-            Object.keys(af.wav_by_duration || {}).forEach(function (d) {
-                if (!af.wav_by_duration[d]) bad.push('WAV ' + d + 's');
-            });
-            Object.keys(af.logo_by_format || {}).forEach(function (fid) {
-                if (!af.logo_by_format[fid]) bad.push('Logo ' + fid);
-            });
-            Object.keys(af.surimp_vo2_solo || {}).forEach(function (fid) {
-                if (!af.surimp_vo2_solo[fid]) bad.push('Surimp VO2 solo ' + fid);
-            });
-            if (bad.length === 0) {
-                el.style.display = 'none';
-                el.innerHTML = '';
-                return;
-            }
-            el.style.display = 'block';
-            el.style.background = 'rgba(185,28,28,0.22)';
-            el.style.border = '1px solid #b91c1c';
-            el.style.color = '#fecaca';
-            el.innerHTML = '<strong>Thiếu / chưa đủ:</strong> ' + bad.join(' · ');
-        }
-
-        function renderGoldFilters() {
-            if (!goldManifestData) return;
-            const af = goldManifestData.asset_flags || {};
-            const fw = document.getElementById('gold-formats-wrap');
-            const dw = document.getElementById('gold-durations-wrap');
-            const cw = document.getElementById('gold-codecs-wrap');
-            if (fw) {
-                fw.innerHTML = (goldManifestData.formats || []).map(function (f) {
-                    const logoOk = af.logo_by_format && af.logo_by_format[f.id] === true;
-                    return _goldChipHtml(logoOk, f.id + ' (' + f.width + '×' + f.height + ')', 'gold-fmt', f.id, true);
-                }).join('');
-            }
-            if (dw) {
-                dw.innerHTML = (goldManifestData.durations_seconds || []).map(function (d) {
-                    const wavOk = af.wav_by_duration && af.wav_by_duration[String(d)] === true;
-                    return _goldChipHtml(wavOk, d + 's', 'gold-dur', d, true);
-                }).join('');
-            }
-            if (cw) {
-                cw.innerHTML = (goldManifestData.export_codecs || []).map(function (c) {
-                    return _goldChipHtml(true, c.label || c.id, 'gold-codec', c.id, true);
-                }).join('');
-            }
-        }
-
-        function goldOnVoChange() {
-            renderGoldLines();
-        }
-
-        function renderGoldLines() {
-            if (!goldManifestData) return;
-            const vo = document.getElementById('gold-vo').value;
-            const wrap = document.getElementById('gold-lines-wrap');
-            const lines = (goldManifestData.deliverable_lines || {})[vo] || [];
-            const readinessById = {};
-            (goldManifestData.readiness && goldManifestData.readiness[vo] || []).forEach(function (r) {
-                readinessById[r.id] = r;
-            });
-            if (!wrap) return;
-            wrap.innerHTML = lines.map(function (L, i) {
-                const r = readinessById[L.id];
-                let ok = r && r.ready;
-                
-                // Khóa cứng các dòng Solo theo yêu cầu người dùng
-                if (['solo_branded_sub', 'solo_branded_nosub', 'solo_clean_sub', 'solo_clean_nosub'].includes(L.id)) {
-                    ok = false;
-                }
-                const isSolo = L.label.toLowerCase().includes('solo');
-                const rowClass = 'checkbox-label gold-line-row' + (isSolo ? ' solo-warning' : '');
-                
-                const rowStyle = ok
-                    ? 'background:#ffffff;color:#0f172a;'
-                    : (isSolo ? '' : 'background:#b91c1c;color:#f8fafc;');
-                
-                const disabled = ok ? '' : ' disabled';
-                const checked = ok ? ' checked' : '';
-                const tip = ok ? '' : (' title="Thiếu: ' + (r.missing || []).join(', ') + '"');
-                const suffix = ok ? '' : '<span class="gold-line-not-ready">không đủ</span>';
-                
-                return '<label class="' + rowClass + '"' + tip + ' style="display:flex;align-items:flex-start;gap:0.5rem;' + rowStyle + 'padding:0.45rem 0.6rem;border-radius:10px;cursor:' + (ok ? 'pointer' : 'not-allowed') + ';">' +
-                    '<input type="checkbox" name="gold-line" value="' + L.id + '"' + checked + disabled + '>' +
-                    '<span style="flex:1;">' + (i + 1) + '. ' + L.label + '</span>' +
-                    suffix +
-                    '</label>';
-            }).join('');
-        }
-
-        function _goldChecked(name) {
-            return Array.from(document.querySelectorAll(`input[name="${name}"]:checked`)).map(el => el.value);
-        }
-
-        function _goldRequestBody() {
-            const vo = document.getElementById('gold-vo').value;
-            const lineIds = _goldChecked('gold-line').map(String);
-            const formats = _goldChecked('gold-fmt').map(String);
-            const durs = _goldChecked('gold-dur').map(s => parseInt(s, 10));
-            const codecs = _goldChecked('gold-codec').map(String);
-            if (!lineIds.length) {
-                return { error: 'Chọn ít nhất một deliverable line.' };
-            }
-            return {
-                body: {
-                    vo,
-                    line_ids: lineIds,
-                    formats,
-                    durations_seconds: durs,
-                    export_codec_ids: codecs
-                }
-            };
-        }
-
-        async function submitGoldPlan() {
-            const status = document.getElementById('gold-plan-status');
-            const pre = document.getElementById('gold-plan-json');
-            const btn = document.getElementById('gold-plan-btn');
-            const gr = _goldRequestBody();
-            if (gr.error) {
-                alert(gr.error);
-                return;
-            }
-            const body = gr.body;
-            if (status) status.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Planning…';
-            if (btn) btn.disabled = true;
-            try {
-                const r = await fetch('/api/mastering/gold-plan', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                const data = await r.json();
-                if (!r.ok) throw new Error(data.detail || JSON.stringify(data));
-                if (status) {
-                    let html = `<div style="padding: 1rem; background: var(--surface); border-radius: 10px; border: 1px solid var(--border-color);">
-                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; color: var(--success); font-weight: 700;">
-                            <i class="ph ph-check-circle"></i> Batch Plan Ready
-                        </div>
-                        <div style="font-size: 0.9rem; margin-bottom: 0.4rem;"><b>${data.count}</b> jobs intended for VO: <code>${data.vo}</code></div>
-                    `;
-                    if (data.first_job_assets) {
-                        const a = data.first_job_assets;
-                        html += `
-                            <div style="font-size: 0.75rem; color: var(--text-muted); padding: 0.5rem; background: rgba(255,255,255,0.03); border-radius: 6px;">
-                                <b>Check mẫu:</b> 
-                                WAV: ${a.wav?.exists ? '✅' : '❌'} | 
-                                Logo: ${a.logo?.exists ? '✅' : '❌'} | 
-                                Surimp: ${a.surimp?.exists ? '✅' : '❌'}
-                            </div>
-                        `;
-                    }
-                    html += `</div>`;
-                    status.innerHTML = html;
-                }
-                if (pre) pre.style.display = 'none';
-            } catch (e) {
-                if (status) status.innerHTML = '<span style="color:var(--error)">' + e.message + '</span>';
-            }
-            if (btn) btn.disabled = false;
-        }
-
-        async function submitGoldRender() {
-            const status = document.getElementById('gold-plan-status');
-            const pre = document.getElementById('gold-plan-json');
-            const btn = document.getElementById('gold-render-btn');
-            const gr = _goldRequestBody();
-            if (gr.error) {
-                alert(gr.error);
-                return;
-            }
-            // Bỏ confirm theo yêu cầu user - bấm là chạy luôn
-            // if (!confirm('Queue render batch? Cần worker RQ; có thể mất nhiều thời gian.')) return;
-            const body = gr.body;
-            if (status) status.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Đang gửi queue…';
-            if (btn) btn.disabled = true;
-            try {
-                const r = await fetch('/api/mastering/gold-render', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                const data = await r.json();
-                if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || data));
-                const jobId = data.job_id;
-                const workerHint = data.worker_hint || '';
-                const appRedis = data.redis_url || '';
-                const qName = data.queue_name || '';
-                const pollStarted = Date.now();
-                if (status) {
-                    status.style.display = 'block';
-                    status.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Job <code>' + jobId + '</code> queued...';
-                }
-                if (pre) pre.style.display = 'none';
-
-                pollJobStatus(jobId, 'gold-plan-status');
-            } catch (e) {
-                if (status) status.innerHTML = '<span style="color:var(--error)">' + e.message + '</span>';
-                if (btn) btn.disabled = false;
-            }
-        }
-
-        async function updateMasterPreview(input) {
-            const player = document.getElementById('master-preview-player');
-            const img = document.getElementById('master-preview-img');
-            const placeholder = document.getElementById('master-preview-placeholder');
-            
-            if (input.files.length > 0) {
-                const file = input.files[0];
-                const ext = file.name.split('.').pop().toLowerCase();
-                const isMov = ext === 'mov' || ext === 'qt';
-
-                if (isMov) {
-                    await fetchThumbnail(file, img, player, placeholder);
-                } else {
-                    const videoUrl = URL.createObjectURL(file);
-                    player.src = videoUrl;
-                    player.style.display = 'block';
-                    img.style.display = 'none';
-                    if (placeholder) placeholder.style.display = 'none';
-                    
-                }
-                clearMasterResults();
-            } else {
-                player.style.display = 'none';
-                img.style.display = 'none';
-                if (placeholder) {
-                    placeholder.style.display = '';
-                    placeholder.innerHTML = '<i class="ph ph-monitor-play"></i> Video preview will appear here';
-                }
-            }
-        }
-
-        function getMasterVideo() {
-            const input = document.getElementById('master-video-input');
-            if (!input || !input.files.length) {
-                alert('Please upload a video first!');
-                return null;
-            }
-            return input.files[0];
-        }
-
-        // === Clear previous master results ===
-        function clearMasterResults() {
-            ['status-smartcut', 'status-logo', 'master-status', 'v-status-area', 'm-status-area'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) {
-                    el.className = el.id.includes('status-') ? 'card-status' : '';
-                    if (!el.className) el.style.display = 'none';
-                    el.innerHTML = '';
-                    el.style.flexDirection = '';
-                }
-            });
-            // Also hide result areas
-            ['m-result-area', 'v-result-area'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.style.display = 'none';
-            });
-        }
-
-        // === Toast notification ===
-        function showToast(message, type = 'info') {
-            const container = document.getElementById('toast-container');
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            toast.innerHTML = `<i class="ph ph-${type === 'success' ? 'check-circle' : type === 'error' ? 'x-circle' : 'info'}"></i> ${message}`;
-            container.appendChild(toast);
-            setTimeout(() => toast.remove(), 4500);
-        }
-
-        // === Lightweight polling for master jobs (no big status box) ===
-        function pollMasterJob(jobId, { onComplete, onFail, statusEl, btnEl }) {
-            const poll = async () => {
-                try {
-                    const response = await fetch('/api/jobs/' + jobId);
-                    const job = await response.json();
-
-                    if (statusEl) {
-                        statusEl.className = 'card-status active';
-                        const msg = job.message || 'Processing...';
-                        statusEl.innerHTML = `<i class="ph ph-spinner ph-spin"></i> ${msg} ${job.progress}%`;
-                    }
-
-                    if (job.status === 'completed') {
-                        if (statusEl) {
-                            statusEl.className = 'card-status active done';
-                            statusEl.innerHTML = `<i class="ph ph-check-circle"></i> Done!`;
-                        }
-                        if (onComplete) onComplete(job);
-                    } else if (job.status === 'failed') {
-                        if (statusEl) {
-                            statusEl.className = 'card-status active error';
-                            statusEl.innerHTML = `<i class="ph ph-x-circle"></i> ${job.error || 'Failed'}`;
-                        }
-                        if (onFail) onFail(job);
-                    } else {
-                        setTimeout(poll, 2500);
-                    }
-                } catch (e) {
-                    setTimeout(poll, 5000);
-                }
-            };
-            setTimeout(poll, 2000);
-        }
-
-        async function analyzeScenes() {
-            const video = getMasterVideo();
-            if (!video) return;
-
-            const btn = document.getElementById('btn-analyze');
-            btn.disabled = true;
-            btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Analyzing...';
-
-            try {
-                const formData = new FormData();
-                formData.append('video', video);
-
-                const response = await fetch('/api/master/analyze-scenes', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-
-                if (data.job_id) {
-                    pollSceneResults(data.job_id);
-                }
-            } catch (error) {
-                showToast('Error: ' + error.message, 'error');
-                btn.disabled = false;
-                btn.innerHTML = '<i class="ph ph-scan"></i> Analyze Scenes';
-            }
-        }
-
-        async function pollSceneResults(jobId) {
-            const poll = async () => {
-                try {
-                    const response = await fetch(`/api/master/scene-results/${jobId}`);
-                    const data = await response.json();
-
-                    if (data.status === 'completed' && data.scenes) {
-                        currentSceneJobId = jobId;
-                        displaySceneTimeline(data.scenes);
-                        document.getElementById('btn-smartcut').disabled = false;
-                        document.getElementById('btn-logo-remove').disabled = false;
-                        document.getElementById('btn-analyze').disabled = false;
-                        document.getElementById('btn-analyze').innerHTML = '<i class="ph ph-check-circle"></i> Analysis Done';
-                        showToast(`Scene analysis done! ${data.scenes.length} scenes detected.`, 'success');
-                    } else if (data.status === 'failed') {
-                        document.getElementById('btn-analyze').disabled = false;
-                        document.getElementById('btn-analyze').innerHTML = '<i class="ph ph-scan"></i> Analyze Scenes';
-                        showToast('Scene analysis failed!', 'error');
-                    } else {
-                        setTimeout(poll, 3000);
-                    }
-                } catch (e) {
-                    setTimeout(poll, 5000);
-                }
-            };
-            setTimeout(poll, 3000);
-        }
-
-        function displaySceneTimeline(scenes) {
-            const container = document.getElementById('scene-timeline');
-            const resultsDiv = document.getElementById('scene-results');
-            resultsDiv.style.display = 'block';
-
-            const typeColors = {
-                'content': '#43e97b',
-                'logo': '#f5576c',
-                'intro': '#f093fb',
-                'outro': '#667eea',
-                'product': '#fda085',
-                'black_screen': '#333',
-                'unknown': '#888',
-            };
-
-            let html = '';
-            scenes.forEach(s => {
-                const color = typeColors[s.scene_type] || '#888';
-                const thumbHtml = s.keyframe_url
-                    ? `<img src="${s.keyframe_url}" alt="Scene ${s.index}" style="width: 100%; height: 64px; object-fit: cover; border-radius: 4px;">`
-                    : `<div style="width: 100%; height: 64px; border-radius: 4px; background: var(--surface); display: flex; align-items: center; justify-content: center;"><i class="ph ph-image" style="color: var(--text-muted);"></i></div>`;
-
-                html += `
-                    <div style="min-width: 110px; max-width: 110px; background: var(--surface-light); border-radius: 8px; border-top: 3px solid ${color}; padding: 0.4rem; flex-shrink: 0; cursor: default;">
-                        ${thumbHtml}
-                        <div style="margin-top: 0.3rem; text-align: center;">
-                            <div style="font-size: 0.65rem; font-weight: 700; color: ${color}; text-transform: uppercase;">${s.scene_type}</div>
-                            <div style="font-size: 0.6rem; color: var(--text-muted);">${s.start_time.toFixed(1)}s – ${s.end_time.toFixed(1)}s</div>
-                        </div>
-                    </div>
-                `;
-            });
-            container.innerHTML = html;
-        }
-
-        async function smartCut() {
-            if (!currentSceneJobId) {
-                alert('Please run Scene Analysis first!');
-                return;
-            }
-
-            const btn = document.getElementById('btn-smartcut');
-            const statusEl = document.getElementById('status-smartcut');
-            btn.disabled = true;
-            btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Cutting...';
-            clearMasterResults();
-
-            try {
-                const formData = new FormData();
-                formData.append('scene_job_id', currentSceneJobId);
-                formData.append('remove_intro', document.getElementById('sc-intro').checked);
-                formData.append('remove_outro', document.getElementById('sc-outro').checked);
-                formData.append('remove_logo', document.getElementById('sc-logo').checked);
-                formData.append('remove_product', document.getElementById('sc-product').checked);
-
-                const response = await fetch('/api/master/smart-cut', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-
-                if (data.job_id) {
-                    pollMasterJob(data.job_id, {
-                        statusEl,
-                        onComplete: (job) => {
-                            btn.disabled = false;
-                            btn.innerHTML = '<i class="ph ph-scissors"></i> Smart Cut';
-                            if (job.result_path && job.result_path.endsWith('.mp4')) {
-                                const dlUrl = '/api/download/' + data.job_id;
-                                statusEl.className = 'card-status active done';
-                                statusEl.style.flexDirection = 'column';
-                                statusEl.innerHTML = `
-                                    <video controls src="${dlUrl}" style="width: 100%; border-radius: 6px; margin-bottom: 0.5rem;"></video>
-                                    <a href="${dlUrl}" download class="btn btn-primary" style="width: 100%; justify-content: center; text-decoration: none; font-size: 0.8rem;">
-                                        <i class="ph ph-download-simple"></i> Download Video
-                                    </a>`;
-                                showToast('Smart Cut completed!', 'success');
-                            } else {
-                                showToast('Smart Cut completed!', 'success');
-                            }
-                        },
-                        onFail: (job) => {
-                            btn.disabled = false;
-                            btn.innerHTML = '<i class="ph ph-scissors"></i> Smart Cut';
-                            statusEl.className = 'card-status active error';
-                            statusEl.innerHTML = '<i class="ph ph-x-circle"></i> ' + (job.error || 'Failed');
-                            showToast('Smart Cut failed!', 'error');
-                        }
-                    });
-                }
-            } catch (error) {
-                showToast('Error: ' + error.message, 'error');
-                btn.disabled = false;
-                btn.innerHTML = '<i class="ph ph-scissors"></i> Smart Cut';
-            }
-        }
-
-        async function logoRemove() {
-            if (!currentSceneJobId) {
-                alert('Please run Scene Analysis first!');
-                return;
-            }
-
-            const btn = document.getElementById('btn-logo-remove');
-            const statusEl = document.getElementById('status-logo');
-            btn.disabled = true;
-            btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Removing...';
-            clearMasterResults();
-            try {
-                const formData = new FormData();
-                formData.append('scene_job_id', currentSceneJobId);
-
-                const response = await fetch('/api/master/logo-remove', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-
-                if (data.job_id) {
-                    pollMasterJob(data.job_id, {
-                        statusEl,
-                        onComplete: (job) => {
-                            btn.disabled = false;
-                            btn.innerHTML = '<i class="ph ph-magic-wand"></i> Auto Remove Logo';
-                            if (job.result_path && job.result_path.endsWith('.mp4')) {
-                                const dlUrl = '/api/download/' + data.job_id;
-                                statusEl.className = 'card-status active done';
-                                statusEl.style.flexDirection = 'column';
-                                statusEl.innerHTML = `
-                                    <video controls src="${dlUrl}" style="width: 100%; border-radius: 6px; margin-bottom: 0.5rem;"></video>
-                                    <a href="${dlUrl}" download class="btn btn-primary" style="width: 100%; justify-content: center; text-decoration: none; font-size: 0.8rem;">
-                                        <i class="ph ph-download-simple"></i> Download Video
-                                    </a>`;
-                                showToast('Logo removal completed!', 'success');
-                            } else {
-                                showToast('Logo removal completed!', 'success');
-                            }
-                        },
-                        onFail: (job) => {
-                            btn.disabled = false;
-                            btn.innerHTML = '<i class="ph ph-magic-wand"></i> Auto Remove Logo';
-                            statusEl.className = 'card-status active error';
-                            statusEl.innerHTML = '<i class="ph ph-x-circle"></i> ' + (job.error || 'Failed');
-                            showToast('Logo removal failed!', 'error');
-                        }
-                    });
-                }
-            } catch (error) {
-                showToast('Error: ' + error.message, 'error');
-                btn.disabled = false;
-                btn.innerHTML = '<i class="ph ph-magic-wand"></i> Auto Remove Logo';
-            }
-        }
-
-        function openModal(id) {
-            document.getElementById(id).classList.add('active');
-        }
-        function closeModal(id) {
-            document.getElementById(id).classList.remove('active');
-        }
-        function switchModalTab(tab) {
-            document.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.modal-panel').forEach(p => p.classList.remove('active'));
-            document.getElementById('m-tab-' + tab).classList.add('active');
-            document.getElementById('m-panel-' + tab).classList.add('active');
-        }
-
-        // --- Canvas Drawing Logic (Similar to Mastering_video) ---
-        function initCanvas(canvasId, placeholderId, uploadId, btnId, clearBtnId, brushSizeId, brushValId) {
-            const canvas = document.getElementById(canvasId);
-            const ctx = canvas.getContext('2d');
-            let isDrawing = false;
-            let brushSize = 25;
-            let originalImage = null;
-            let maskCanvas = document.createElement('canvas');
-            let maskCtx = maskCanvas.getContext('2d');
-            let uploadedFile = null;
-
-            document.getElementById(brushSizeId).oninput = (e) => {
-                brushSize = parseInt(e.target.value);
-                document.getElementById(brushValId).textContent = brushSize;
-            };
-
-            const handleFile = (file) => {
-                uploadedFile = file;
-                const reader = new FileReader();
-                reader.onload = (ev) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        const maxW = 700;
-                        let w = img.width, h = img.height;
-                        if (w > maxW) { h = (maxW / w) * h; w = maxW; }
-                        canvas.width = w; canvas.height = h;
-                        canvas.style.display = 'block';
-                        document.getElementById(placeholderId).style.display = 'none';
-                        ctx.drawImage(img, 0, 0, w, h);
-                        originalImage = img;
-                        maskCanvas.width = w; maskCanvas.height = h;
-                        maskCtx.fillStyle = 'black';
-                        maskCtx.fillRect(0, 0, w, h);
-                        document.getElementById(btnId).disabled = false;
-                    };
-                    img.src = ev.target.result;
-                };
-                reader.readAsDataURL(file);
-            };
-
-            document.getElementById(uploadId).onchange = (e) => {
-                if (e.target.files[0]) handleFile(e.target.files[0]);
-            };
-
-            const draw = (e) => {
-                const rect = canvas.getBoundingClientRect();
-                const x = (e.clientX - rect.left) * (canvas.width / rect.width);
-                const y = (e.clientY - rect.top) * (canvas.height / rect.height);
-                ctx.globalAlpha = 0.5; ctx.fillStyle = '#ff3366';
-                ctx.beginPath(); ctx.arc(x, y, brushSize / 2, 0, Math.PI * 2); ctx.fill();
-                maskCtx.fillStyle = 'white';
-                maskCtx.beginPath(); maskCtx.arc(x, y, brushSize / 2, 0, Math.PI * 2); maskCtx.fill();
-            };
-
-            canvas.onmousedown = (e) => { isDrawing = true; draw(e); };
-            canvas.onmousemove = (e) => { if (isDrawing) draw(e); };
-            window.onmouseup = () => isDrawing = false;
-
-            document.getElementById(clearBtnId).onclick = () => {
-                if (!originalImage) return;
-                ctx.drawImage(originalImage, 0, 0, canvas.width, canvas.height);
-                maskCtx.fillStyle = 'black'; maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
-            };
-
-            return { getMask: () => maskCanvas, getFile: () => uploadedFile, setFile: (file) => handleFile(file) };
-        }
-
-        const imgInpaint = initCanvas('inpaint-canvas', 'inpaint-placeholder', 'm-inpaint-upload', 'btn-m-inpaint', 'btn-m-clear', 'brush-size', 'brush-size-val');
-        const vidInpaint = initCanvas('video-inpaint-canvas', 'v-inpaint-placeholder', 'm-video-upload', 'btn-v-inpaint', 'btn-v-clear', 'v-brush-size', 'v-brush-size-val');
-
-        // Image inpaint submit
-        document.getElementById('btn-m-inpaint').onclick = async () => {
-            const btn = document.getElementById('btn-m-inpaint');
-            btn.disabled = true; btn.innerHTML = '<i class="ph ph-spinner ph-spin"></i> Processing...';
-            try {
-                const maskBlob = await new Promise(r => imgInpaint.getMask().toBlob(r, 'image/png'));
-                const formData = new FormData();
-                formData.append('image', imgInpaint.getFile());
-                formData.append('mask', maskBlob, 'mask.png');
-                const res = await fetch('/api/master/inpaint-image', { method: 'POST', body: formData });
-                const data = await res.json();
-                if (data.result_url) {
-                    document.getElementById('m-result-area').style.display = 'block';
-                    document.getElementById('m-result-img').src = data.result_url + '?t=' + Date.now();
-                    document.getElementById('m-download-link').href = data.result_url;
-                }
-            } catch (e) { alert(e.message); }
-            btn.disabled = false; btn.innerHTML = '<i class="ph ph-paint-brush"></i> Xóa Đối Tượng';
-        };
-
-        // Video inpaint submit
-        let currentVideoPath = null;
-        document.getElementById('m-video-upload').addEventListener('change', async (e) => {
-            if (!e.target.files[0]) return;
-            const btn = document.getElementById('btn-v-inpaint');
-            btn.innerHTML = '⏳ Extracting frame...';
-            const formData = new FormData();
-            formData.append('video', e.target.files[0]);
-            try {
-                const res = await fetch('/api/master/inpaint-video-preview', { method: 'POST', body: formData });
-                const data = await res.json();
-                currentVideoPath = data.video_path;
-                // Use preview URL to set the canvas background
-                const imgRes = await fetch(data.preview_url);
-                const blob = await imgRes.blob();
-                vidInpaint.setFile(new File([blob], 'preview.png'));
-                btn.innerHTML = '<i class="ph ph-film-strip"></i> Xử lý Video';
-            } catch (e) { alert(e.message); btn.innerHTML = 'Xử lý Video'; }
-        });
-
-        document.getElementById('btn-v-inpaint').onclick = async () => {
-            if (!currentVideoPath) return;
-            const btn = document.getElementById('btn-v-inpaint');
-            btn.disabled = true;
-            document.getElementById('v-status-area').style.display = 'block';
-            try {
-                const maskBlob = await new Promise(r => vidInpaint.getMask().toBlob(r, 'image/png'));
-                const formData = new FormData();
-                formData.append('video_path', currentVideoPath);
-                formData.append('mask', maskBlob, 'mask.png');
-                const res = await fetch('/api/master/inpaint-video', { method: 'POST', body: formData });
-                const data = await res.json();
-                if (data.job_id) pollVideoInpaint(data.job_id);
-            } catch (e) { alert(e.message); btn.disabled = false; }
-        };
-
-        function pollVideoInpaint(jobId) {
-            const poll = async () => {
-                const res = await fetch('/api/jobs/' + jobId);
-                const job = await res.json();
-                const msg = job.message || 'Processing...';
-                document.getElementById('v-progress-fill').style.width = job.progress + '%';
-                // If there's a label for video inpaint progress text, update it too
-                const label = document.querySelector('#v-status-area .status-label');
-                if (label) label.textContent = msg + ' ' + job.progress + '%';
-                if (job.status === 'completed') {
-                    document.getElementById('v-result-area').style.display = 'block';
-                    document.getElementById('v-result-preview').src = job.result_url;
-                    document.getElementById('v-download-link').href = job.result_url;
-                    document.getElementById('btn-v-inpaint').disabled = false;
-                } else if (job.status === 'failed') {
-                    alert('Lỗi: ' + job.error);
-                    document.getElementById('btn-v-inpaint').disabled = false;
-                } else {
-                    setTimeout(poll, 2000);
-                }
-            };
-            poll();
-        }
-
-        async function replaceLogo() {
-            const video = getMasterVideo();
-            if (!video) return;
-
-            const logoInput = document.getElementById('logo-input');
-            if (!logoInput || !logoInput.files.length) {
-                alert('Please upload a new logo!');
-                return;
-            }
-
-            document.getElementById('btn-replace-logo').disabled = true;
-            document.getElementById('master-status').style.display = 'block';
-
-            try {
-                const formData = new FormData();
-                formData.append('video', video);
-                formData.append('logo', logoInput.files[0]);
-
-                const response = await fetch('/api/master/replace-logo', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-
-                if (data.job_id) {
-                    pollJobStatus(data.job_id, 'master-status');
-                }
-            } catch (error) {
-                alert('Error: ' + error.message);
-            } finally {
-                document.getElementById('btn-replace-logo').disabled = false;
-            }
-        }
-
-        async function addPackshot() {
-            const video = getMasterVideo();
-            if (!video) return;
-
-            const psInput = document.getElementById('packshot-input');
-            if (!psInput || !psInput.files.length) {
-                alert('Please upload a packshot image!');
-                return;
-            }
-
-            document.getElementById('btn-packshot').disabled = true;
-            document.getElementById('master-status').style.display = 'block';
-
-            try {
-                const formData = new FormData();
-                formData.append('video', video);
-                formData.append('packshot', psInput.files[0]);
-
-                const response = await fetch('/api/master/add-packshot', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-
-                if (data.job_id) {
-                    pollJobStatus(data.job_id, 'master-status');
-                }
-            } catch (error) {
-                alert('Error: ' + error.message);
-            } finally {
-                document.getElementById('btn-packshot').disabled = false;
-            }
-        }
-
-        function _normalizeCandidatePath(rawPath) {
-            if (!rawPath) return '';
-            const normalized = String(rawPath).replace(/\\/g, '/').trim();
-            const cleaned = normalized.split('#')[0].split('?')[0];
-            if (!cleaned) return '';
-
-            // If backend ever returns an absolute URL (e.g. http://app/outputs/...)
-            // or protocol-relative URL (//app/outputs/...), strip origin and keep the path.
-            // This prevents browser trying to resolve Docker-internal hostnames like "app".
-            try {
-                const maybeUrl = cleaned.startsWith('//') ? ('http:' + cleaned) : cleaned;
-                if (/^https?:\/\//i.test(maybeUrl)) {
-                    const u = new URL(maybeUrl);
-                    return u.pathname || '';
-                }
-            } catch (_) {
-                // ignore
-            }
-
-            return cleaned;
-        }
-
-        function buildPreviewVideoUrl(rawPath) {
-            if (!rawPath) return '';
-            const cleaned = _normalizeCandidatePath(rawPath);
-            const lowered = cleaned.toLowerCase();
-            let relativePath = '';
-
-            if (!cleaned) return '';
-
-            if (lowered.startsWith('/api/video-preview/')) {
-                return cleaned;
-            }
-            if (lowered.startsWith('/api/video/')) {
-                return cleaned;
-            }
-            if (lowered.startsWith('api/video-preview/')) {
-                return `/${cleaned}`;
-            }
-            if (lowered.startsWith('api/video/')) {
-                return `/${cleaned}`;
-            }
-            // At this point cleaned is either a path or a URL-safe path; never return cross-origin URLs.
-
-            if (lowered.startsWith('/outputs/')) {
-                relativePath = cleaned.slice('/outputs/'.length);
-            } else if (lowered.startsWith('outputs/')) {
-                relativePath = cleaned.slice('outputs/'.length);
-            } else {
-                const marker = '/outputs/';
-                const markerIndex = lowered.lastIndexOf(marker);
-                if (markerIndex !== -1) {
-                    relativePath = cleaned.slice(markerIndex + marker.length);
-                } else {
-                    const isAbsolutePath = cleaned.startsWith('/') || /^[a-zA-Z]:\//.test(cleaned);
-                    if (isAbsolutePath) return '';
-
-                    // Relative fallback for unexpected values.
-                    relativePath = cleaned.replace(/^\/+/, '');
-                }
-            }
-
-            relativePath = relativePath.replace(/^\/+/, '');
-            if (!relativePath) return '';
-
-            // Prefer browser-compatible preview stream (H.264/AAC) when available.
-            return `/api/video-preview/${encodeURI(relativePath).replace(/%2F/g, '/')}`;
-        }
-
-        function extractOutputRelativePath(rawPath) {
-            if (!rawPath) return '';
-            const cleaned = _normalizeCandidatePath(rawPath);
-            const lowered = cleaned.toLowerCase();
-            if (!cleaned) return '';
-
-            if (lowered.startsWith('/api/video/')) return cleaned.slice('/api/video/'.length).replace(/^\/+/, '');
-            if (lowered.startsWith('api/video/')) return cleaned.slice('api/video/'.length).replace(/^\/+/, '');
-            if (lowered.startsWith('/api/outputs/')) return cleaned.slice('/api/outputs/'.length).replace(/^\/+/, '');
-            if (lowered.startsWith('api/outputs/')) return cleaned.slice('api/outputs/'.length).replace(/^\/+/, '');
-            if (lowered.startsWith('/outputs/')) return cleaned.slice('/outputs/'.length).replace(/^\/+/, '');
-            if (lowered.startsWith('outputs/')) return cleaned.slice('outputs/'.length).replace(/^\/+/, '');
-
-            const marker = '/outputs/';
-            const markerIndex = lowered.lastIndexOf(marker);
-            if (markerIndex !== -1) {
-                return cleaned.slice(markerIndex + marker.length).replace(/^\/+/, '');
-            }
-            return '';
-        }
-
-        function buildPreviewVideoCandidates(rawPath, downloadUrl) {
-            const candidates = [];
-            const pushUnique = (url) => {
-                if (!url) return;
-                if (!candidates.includes(url)) candidates.push(url);
-            };
-
-            const apiPreviewUrl = buildPreviewVideoUrl(rawPath);
-            const relativePath = extractOutputRelativePath(rawPath);
-            // 1) Preview stream (transcoded if needed) with Range support
-            pushUnique(apiPreviewUrl);
-            // 2) Direct stream (Range support) as secondary
-            if (relativePath) {
-                pushUnique(`/api/video/${encodeURI(relativePath).replace(/%2F/g, '/')}`);
-            }
-            // 3) Static outputs (may not support seeking reliably depending on server)
-            if (relativePath) {
-                pushUnique(`/api/outputs/${encodeURI(relativePath).replace(/%2F/g, '/')}`);
-            }
-            // 4) Download fallback (often lacks Range; backend should handle as best-effort)
-            pushUnique(downloadUrl);
-
-            return candidates;
-        }
-
-        function handleVideoPreviewError(videoEl) {
-            if (!videoEl) return;
-            const fallbackRaw = videoEl.dataset.fallbacks || '';
-            if (!fallbackRaw) return;
-            const fallbacks = fallbackRaw.split('|').filter(Boolean);
-            if (!fallbacks.length) return;
-
-            const nextUrl = fallbacks.shift();
-            videoEl.dataset.fallbacks = fallbacks.join('|');
-            videoEl.src = nextUrl;
-            videoEl.load();
-        }
-        
-        async function pollJobStatus(jobId, statusBoxId) {
-            const statusBox = document.getElementById(statusBoxId);
-            
-            const poll = async () => {
-                try {
-                    const response = await fetch('/api/jobs/' + jobId);
-                    const job = await response.json();
-                    
-                    const progress = job.progress || 0;
-                    const msg = job.message || 'Processing...';
-                    const stepMatch = msg.match(/Step (\d\/\d): (.*)/);
-                    let stepHtml = '';
-                    if (stepMatch) {
-                        stepHtml = `<div class="status-compact-step"><i class="ph ph-circle-dashed ph-spin"></i> <b>Step ${stepMatch[1]}</b>: ${stepMatch[2]}</div>`;
-                    } else if (job.status === 'processing') {
-                        stepHtml = `<div class="status-compact-step"><i class="ph ph-gear ph-spin"></i> ${msg}</div>`;
-                    }
-
-                    let html = `
-                        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 0.8rem;">
-                            <div>
-                                <h3 style="margin: 0 0 0.2rem 0; font-size: 0.9rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">Mastering Pipeline</h3>
-                                ${stepHtml}
-                            </div>
-                            <span class="status-percent" style="font-size: 1.5rem; font-weight: 800; line-height: 1;">${progress}%</span>
-                        </div>
-                        <div class="progress-bar" style="background: rgba(255,255,255,0.05); height: 10px; border-radius: 5px; overflow: hidden; margin-bottom: 1rem; border: 1px solid rgba(255,255,255,0.05);">
-                            <div class="fill" style="width: ${progress}%; height: 100%; background: var(--gradient-primary); transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);"></div>
-                        </div>
-                        <div class="status-text">
-                            <span class="status-label ${job.status === 'completed' ? 'status-completed' : ''} ${job.status === 'failed' ? 'status-failed' : ''}" style="padding: 0.4rem 0.8rem; border-radius: 8px; font-weight: 500;">
-                                ${job.status === 'completed' ? '<i class="ph ph-check-circle"></i> Pipeline Finalized' : job.status === 'failed' ? '<i class="ph ph-x-circle"></i> Failure: ' + job.error : '<i class="ph ph-lightning"></i> Optimization in progress...'}
-                            </span>
-                        </div>
-                    `;
-                    
-                    if (job.status === 'completed') {
-                        const downloadUrl = `/api/download/${jobId}?t=${Date.now()}`;
-                        const resultPath = (job.result_path || "").toLowerCase();
-                        const isVideo = resultPath.endsWith('.mp4') || resultPath.endsWith('.mov') || resultPath.endsWith('.qt') || resultPath.endsWith('.mkv') || resultPath.endsWith('.avi') || resultPath.endsWith('.webm');
-                        const hasMultipleResults = job.result_files && job.result_files.length > 1;
-                        
-                        if (isVideo && !hasMultipleResults) {
-                            const isProRes = resultPath.endsWith('.mov') || resultPath.endsWith('.qt');
-                            const mainLabel = (job.result_files && job.result_files[0]) ? job.result_files[0].label : 'Result Video';
-                            const videoCandidates = buildPreviewVideoCandidates(job.result_path, downloadUrl);
-                            const videoUrl = videoCandidates[0] || downloadUrl;
-                            const videoFallbacks = videoCandidates.slice(1).join('|');
-
-                            // AUTO-LOAD into main preview player if exists
-                            const mainPlayer = document.getElementById('master-preview-player');
-                            const mainImg = document.getElementById('master-preview-img');
-                            const mainPlaceholder = document.getElementById('master-preview-placeholder');
-                            if (mainPlayer && !isProRes) {
-                                mainPlayer.src = videoUrl;
-                                mainPlayer.style.display = 'block';
-                                if (mainImg) mainImg.style.display = 'none';
-                                if (mainPlaceholder) mainPlaceholder.style.display = 'none';
-                            }
-                            
-                            html += `
-                                <div style="margin-top: 1.5rem; background: var(--surface-light); border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color);">
-                                    <div style="padding: 0.8rem 1rem; border-bottom: 1px solid var(--border-color); font-weight: 600; font-size: 0.9rem; color: var(--primary); display: flex; justify-content: space-between; align-items: center;">
-                                        <span><i class="ph ph-video"></i> ${mainLabel}</span>
-                                        ${isProRes ? '<span style="background: var(--warning); color: #000; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem;">PRO FORMAT</span>' : ''}
-                                    </div>
-                                    
-                                    ${isProRes ? `
-                                        <div style="height: 240px; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; padding: 2rem; text-align: center;">
-                                            <i class="ph ph-monitor-play" style="font-size: 3rem; color: var(--warning);"></i>
-                                            <div>
-                                                <div style="font-weight: 600; margin-bottom: 0.3rem;">Professional Format (ProRes)</div>
-                                                <div style="font-size: 0.85rem; color: var(--text-muted);">Browsers cannot preview professional codecs. Please download to view in high quality.</div>
-                                            </div>
-                                        </div>
-                                    ` : `
-                                        <video controls preload="auto" playsinline src="${videoUrl}" data-fallbacks="${videoFallbacks}" onerror="handleVideoPreviewError(this)" style="width: 100%; max-height: 400px; background: #000; display: block;"></video>
-                                    `}
-                                    
-                                    <div style="padding: 1rem; display: flex; align-items: center; gap: 1rem;">
-                                        <a href="${downloadUrl}" download class="btn btn-primary" style="flex: 1; justify-content: center; text-decoration: none;">
-                                            <i class="ph ph-download-simple"></i> Download Video
-                                        </a>
-                                    </div>
-                                </div>
-                            `;
-                        }
-                        // Also handle multi-file results (OR single result if not shown as featured video)
-                        else if (job.result_files && job.result_files.length > 0) {
-                            html += '<div style="margin-top: 1rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">';
-                            job.result_files.forEach((file, index) => {
-                                const fileUrl = `/api/download/${jobId}/${index}`;
-                                const previewFileCandidates = buildPreviewVideoCandidates(file.path, fileUrl);
-                                const previewFileUrl = previewFileCandidates[0] || fileUrl;
-                                const previewFileFallbacks = previewFileCandidates.slice(1).join('|');
-                                const filePath = (file.path || "").toLowerCase();
-                                const isProResFile = filePath.endsWith('.mov') || filePath.endsWith('.qt');
-                                
-                                        html += `
-                                    <div style="background: var(--surface-light); border-radius: 8px; overflow: hidden; border: 1px solid var(--border-color);">
-                                        ${file.type === 'video' ? (isProResFile ? `
-                                            <div style="height: 160px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #000; color: var(--warning); gap: 0.5rem; padding: 1rem; text-align: center;">
-                                                <i class="ph ph-monitor-play" style="font-size: 2rem;"></i>
-                                                <div style="font-size: 0.75rem; font-weight: 600;">ProRes Video</div>
-                                                <div style="font-size: 0.65rem; color: var(--text-muted);">Preview Not Supported</div>
-                                            </div>
-                                        ` : `
-                                            <video controls preload="auto" playsinline src="${previewFileUrl}" data-fallbacks="${previewFileFallbacks}" onerror="handleVideoPreviewError(this)" style="width: 100%; height: 160px; object-fit: cover; background: #000;"></video>
-                                        `) : `
-                                            <div style="height: 160px; display: flex; align-items: center; justify-content: center; background: rgba(59, 130, 246, 0.05); color: var(--primary);">
-                                                <i class="ph ph-file-text" style="font-size: 2.5rem;"></i>
-                                            </div>
-                                        `}
-                                        <div style="padding: 0.75rem;">
-                                            <div style="font-weight: 600; margin-bottom: 0.2rem; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${file.label || 'Result'}</div>
-                                            
-                                            ${(file.metadata && file.metadata.ai_enabled) ? `
-                                                <div class="ai-findings" style="margin-bottom: 0.8rem; padding: 0.6rem; background: rgba(59, 130, 246, 0.08); border-radius: 6px; font-size: 0.75rem;">
-                                                    <div style="display: flex; align-items: center; gap: 0.4rem; font-weight: 700; color: var(--primary); margin-bottom: 0.3rem;">
-                                                        <i class="ph ph-brain"></i> AI Analysis
-                                                    </div>
-                                                    <div style="display: flex; flex-direction: column; gap: 0.2rem; color: var(--text-muted);">
-                                                        ${file.metadata.logo_detection && file.metadata.logo_detection.found ? 
-                                                            `<div><i class="ph ph-tag"></i> Original Logo: <b>${file.metadata.logo_detection.corner}</b></div>` : 
-                                                            `<div><i class="ph ph-tag"></i> No existing logo detected</div>`}
-                                                        
-                                                        ${file.metadata.subject_detection && file.metadata.subject_detection.found ? 
-                                                            `<div><i class="ph ph-target"></i> Product: <b>${file.metadata.subject_detection.label}</b></div>` : 
-                                                            `<div><i class="ph ph-target"></i> Product not detected</div>`}
-                                                        
-                                                        <div style="margin-top: 0.2rem; color: var(--primary); font-weight: 600;">
-                                                            <i class="ph ph-layout"></i> Overlay: <b>${file.metadata.branding_corner || 'top-center'}</b>
-                                                        </div>
-                                                        
-                                                        ${file.metadata.subtitle_sync && file.metadata.subtitle_sync.status === 'ok' ?
-                                                            ` <div style="color: var(--success);"><i class="ph ph-closed-captioning"></i> AI Sync: <b>Matched</b></div>` : ''}
-                                                    </div>
-                                                </div>
-                                            ` : ''}
-
-                                            <a href="${fileUrl}" download class="btn btn-sm" style="width: 100%; justify-content: center; background: var(--surface); border: 1px solid var(--border-color); color: var(--text); text-decoration: none;">
-                                                <i class="ph ph-download-simple"></i> Download
-                                            </a>
-                                        </div>
-                                    </div>
-                                `;
-                            });
-                            html += '</div>';
-                        }
-                        
-                        // Re-enable ALL mastering buttons specifically
-                        document.getElementById('gold-render-btn').disabled = false;
-                        document.getElementById('gold-plan-btn').disabled = false;
-                        document.querySelectorAll('button[type="submit"]').forEach(b => b.disabled = false);
-                    } else if (job.status === 'failed') {
-                        document.getElementById('gold-render-btn').disabled = false;
-                        document.getElementById('gold-plan-btn').disabled = false;
-                         document.querySelectorAll('button[type="submit"]').forEach(b => b.disabled = false);
-                    }
-                    
-                    statusBox.innerHTML = html;
-                    
-                    if (job.status === 'completed' || job.status === 'failed') {
-                        // Auto-scroll to results
-                        statusBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    } else {
-                        setTimeout(poll, 2000);
-                    }
-                } catch (e) {
-                    console.error("Polling error", e);
-                }
-            };
-            
-            poll();
-        }
-        
-        function updateFormatInfo(val) {
-            const infoText = document.getElementById('format-info-text');
-            const infoBox = document.getElementById('format-info-box');
-            
-            if (val === 'mp4_standard') {
-                infoText.textContent = "Ideal for web sharing and general review.";
-                infoBox.style.color = "var(--text-muted)";
-            } else if (val === 'prores') {
-                infoText.textContent = "Production quality (HQ 422). File will be large (.mov).";
-                infoBox.style.color = "var(--warning)";
-            } else if (val === 'mp4_20mbps') {
-                infoText.textContent = "High quality CBR 20Mbps for professional digital delivery.";
-                infoBox.style.color = "var(--success)";
-            } else if (val === 'ae_package') {
-                infoText.textContent = "Creates AE-ready folder package: ProRes video, WAV audio, SRT, timeline JSON (+ ZIP).";
-                infoBox.style.color = "var(--accent)";
-            }
-        }
-        
-        // Auto-reset "Finalized" status when user changes selections
-        ['gold-formats-wrap', 'gold-durations-wrap', 'gold-codecs-wrap', 'gold-lines-wrap'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) {
-                el.addEventListener('change', () => {
-                   const status = document.getElementById('gold-plan-status');
-                   // If status is "Finalized" or "Ready", clear it when selection changes
-                   if (status && (status.innerHTML.includes('Finalized') || status.innerHTML.includes('Ready'))) {
-                       status.innerHTML = '';
-                   }
-                });
-            }
-        });
-
-        // Enable drag-and-drop for main video upload zones.
-        setupVideoDropZone('video-upload-1', 'input[type="file"]', updatePreview);
-        setupVideoDropZone('video-upload-2', 'input[type="file"]');
-        setupVideoDropZone('video-upload-3', 'input[type="file"]', updateMasterPreview);
-        setupExcelDropZone('excel-upload-container', 'excel-translation-input');
-    </script>
+<script src="/static/js/app.js"></script>
 </body>
 </html>

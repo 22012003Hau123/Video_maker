@@ -87,7 +87,10 @@ class SubtitleRenderer:
         subtitles: List[Tuple[float, float, str]],
         output_path: str,
         font_config: FontConfig,
-        video_format: VideoFormat
+        video_format: VideoFormat,
+        font_family: Optional[str] = None,
+        font_size: Optional[int] = None,
+        margin_v: Optional[int] = None,
     ) -> str:
         """
         Tạo file ASS (Advanced SubStation Alpha) với styling
@@ -97,9 +100,9 @@ class SubtitleRenderer:
             minutes = int((seconds % 3600) // 60)
             secs = seconds % 60
             return f"{hours}:{minutes:02d}:{secs:05.2f}"
-            
+
         # Get advanced options from font manager
-        opts = self.font_manager.get_ffmpeg_font_options(font_config.language, video_format.name)
+        opts = self.font_manager.get_ffmpeg_font_options(font_config.language, video_format.name, font_family_override=font_family, font_size_override=font_size, margin_v_override=margin_v)
         alignment = opts.get("alignment", 2)
         margin_l = opts.get("margin_l", 10)
         margin_r = opts.get("margin_r", 10)
@@ -107,6 +110,7 @@ class SubtitleRenderer:
         if margin_v is None:
             margin_v = video_format.subtitle_margin_bottom
         outline_color = opts.get("outline_color_ass", "&H00000000")
+        border_style = opts.get("border_style", 1)
         
         # ASS header với style
         ass_content = f"""[Script Info]
@@ -117,7 +121,7 @@ PlayResY: {video_format.height}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Blur, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{opts['fontname']},{opts['fontsize']},&H00FFFFFF,&H000000FF,{outline_color},{opts['backcolor']},{opts['bold']},{opts['italic']},0,0,{opts['scalex']},{opts['scaley']},0,0,3,{opts['outline']},{opts['shadow']},{opts['blur']},{alignment},{margin_l},{margin_r},{margin_v},1
+Style: Default,{opts['fontname']},{opts['fontsize']},&H00FFFFFF,&H000000FF,{outline_color},{opts['backcolor']},{opts['bold']},{opts['italic']},0,0,{opts['scalex']},{opts['scaley']},0,0,{border_style},{opts['outline']},{opts['shadow']},{opts['blur']},{alignment},{margin_l},{margin_r},{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -193,7 +197,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         language: str = "vi",
         video_format: Optional[str] = None,
         use_ass: bool = True,
-        export_format: str = "mp4_standard"
+        export_format: str = "mp4_standard",
+        font_family: Optional[str] = None,
+        font_size: Optional[int] = None,
+        margin_v: Optional[int] = None,
     ) -> str:
         """
         Render phụ đề lên video
@@ -232,7 +239,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             dir=str(self.output_dir)
         ) as tmp_file:
             if use_ass:
-                self.create_ass_file(subtitles, tmp_file.name, font_config, vf)
+                self.create_ass_file(subtitles, tmp_file.name, font_config, vf, font_family=font_family, font_size=font_size, margin_v=margin_v)
             else:
                 self.create_srt_file(subtitles, tmp_file.name)
             subtitle_file = tmp_file.name

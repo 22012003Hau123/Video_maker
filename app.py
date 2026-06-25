@@ -16,7 +16,7 @@ from datetime import datetime
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, Response, PlainTextResponse
 from fastapi.requests import Request
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
@@ -73,6 +73,11 @@ if static_dir.exists():
 
 # Mount outputs for direct serving (enables Range requests/Seeking)
 app.mount("/api/outputs", StaticFiles(directory=str(OUTPUT_DIR)), name="outputs")
+
+# Mount fonts for browser @font-face loading
+_fonts_dir = Path(__file__).parent / "data" / "fonts"
+_fonts_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/api/fonts/files", StaticFiles(directory=str(_fonts_dir)), name="fonts-files")
 
 # Cleanup Task
 @app.on_event("startup")
@@ -857,7 +862,10 @@ async def process_subtitles(
     video_format: str,
     export_video: bool = True,
     export_srt: bool = True,
-    export_format: str = "mp4_standard"
+    export_format: str = "mp4_standard",
+    font_family: Optional[str] = None,
+    font_size: Optional[int] = None,
+    margin_v: Optional[int] = None,
 ):
     """Background task để xử lý phụ đề đa ngôn ngữ"""
     try:
@@ -946,7 +954,10 @@ async def process_subtitles(
                         output_path,
                         language=lang,
                         video_format=video_format,
-                        export_format=render_export_format
+                        export_format=render_export_format,
+                        font_family=font_family,
+                        font_size=font_size,
+                        margin_v=margin_v,
                     )
                     result_files.append(ResultFile(
                         path=output_path,
@@ -1941,7 +1952,10 @@ async def add_subtitle(
     video_format: str = Form("16x9"),
     export_video: bool = Form(True),
     export_srt: bool = Form(False),
-    export_format: str = Form("mp4_standard")
+    export_format: str = Form("mp4_standard"),
+    font_family: str = Form(""),
+    font_size: Optional[int] = Form(None),
+    margin_v: Optional[int] = Form(None)
 ):
     """
     Thêm phụ đề đa ngôn ngữ vào video bằng AI
@@ -1970,6 +1984,9 @@ async def add_subtitle(
         export_video,
         export_srt,
         export_format,
+        font_family or None,
+        font_size,
+        margin_v,
     )
     
     lang_names = [LANG_NAMES.get(l, l) for l in langs]
@@ -3006,6 +3023,45 @@ def _ensure_web_preview(source_path: Path) -> Path:
     return preview_path
 
 
+@app.post("/api/upload-preview")
+async def upload_preview(video: UploadFile = File(...)):
+    """
+    Upload a video file, transcode first 5s to H.264 preview, return a streamable URL.
+    Used by the frontend to preview .mov/ProRes files on non-Safari browsers.
+    """
+    video_path = save_upload(video, "preview_")
+    try:
+        stat = video_path.stat()
+        fingerprint = f"clip5:{video_path}:{int(stat.st_mtime)}:{stat.st_size}"
+        cache_name = hashlib.sha1(fingerprint.encode()).hexdigest() + ".mp4"
+        preview_path = PREVIEW_CACHE_DIR / cache_name
+
+        if not (preview_path.exists() and preview_path.stat().st_size > 0):
+            PREVIEW_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            cmd = [
+                "ffmpeg", "-y", "-nostdin",
+                "-i", str(video_path),
+                "-t", "5",
+                "-map", "0:v:0",
+                "-map", "0:a:0?",
+                "-c:v", "libx264",
+                "-preset", "ultrafast",
+                "-crf", "28",
+                "-pix_fmt", "yuv420p",
+                "-vf", "scale='min(1280,iw)':-2",
+                "-movflags", "+faststart",
+                "-c:a", "aac", "-b:a", "96k",
+                str(preview_path),
+            ]
+            subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=60)
+
+        rel = preview_path.relative_to(OUTPUT_DIR)
+        return {"preview_url": f"/api/video-preview/{rel.as_posix()}"}
+    except Exception as e:
+        logger.error(f"upload-preview transcode failed: {e}")
+        raise HTTPException(status_code=500, detail="Preview transcode failed")
+
+
 @app.api_route("/api/video/{video_path:path}", methods=["GET", "HEAD"])
 async def stream_video(video_path: str, request: Request):
     """
@@ -3124,6 +3180,47 @@ async def get_supported_languages():
     from src.subtitle.font_manager import get_font_manager
     fm = get_font_manager()
     return {"languages": fm.get_available_languages()}
+
+
+@app.get("/api/fonts/css", response_class=PlainTextResponse)
+async def fonts_css():
+    """Trả về @font-face CSS cho tất cả fonts trong data/fonts/"""
+    fonts_dir = Path(__file__).parent / "data" / "fonts"
+    css = ""
+    if fonts_dir.exists():
+        for f in sorted(fonts_dir.iterdir()):
+            if f.suffix.lower() in ('.ttf', '.otf'):
+                fmt = "truetype" if f.suffix.lower() == ".ttf" else "opentype"
+                css += f'@font-face {{ font-family: "{f.stem}"; src: url("/api/fonts/files/{f.name}") format("{fmt}"); font-display: swap; }}\n'
+    return css
+
+
+@app.get("/api/fonts")
+async def list_fonts():
+    """Danh sách font chữ có sẵn trong data/fonts/"""
+    fonts_dir = Path(__file__).parent / "data" / "fonts"
+    fonts = []
+    if fonts_dir.exists():
+        for f in sorted(fonts_dir.iterdir()):
+            if f.suffix.lower() in ('.ttf', '.otf'):
+                fonts.append({"name": f.stem, "file": f.name, "path": str(f)})
+    return {"fonts": fonts}
+
+
+@app.post("/api/fonts/upload")
+async def upload_font(file: UploadFile = File(...)):
+    """Upload font file (.ttf / .otf) vào data/fonts/"""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file")
+    ext = Path(file.filename).suffix.lower()
+    if ext not in ('.ttf', '.otf'):
+        raise HTTPException(status_code=400, detail="Only .ttf and .otf files are accepted")
+    fonts_dir = Path(__file__).parent / "data" / "fonts"
+    fonts_dir.mkdir(parents=True, exist_ok=True)
+    dest = fonts_dir / file.filename
+    content = await file.read()
+    dest.write_bytes(content)
+    return {"name": dest.stem, "file": dest.name, "size": len(content)}
 
 
 # ============ Run ============
