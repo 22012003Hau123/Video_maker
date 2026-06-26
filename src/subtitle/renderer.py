@@ -11,8 +11,6 @@ from dataclasses import dataclass
 import tempfile
 
 from .font_manager import get_font_manager, FontConfig
-from src.utils.video import get_video_info, detect_video_format
-from src.utils.text import generate_srt_content
 
 logger = logging.getLogger(__name__)
 
@@ -112,39 +110,27 @@ class SubtitleRenderer:
         outline_color = opts.get("outline_color_ass", "&H00000000")
         border_style = opts.get("border_style", 1)
 
-        # Map Helve* aliases to their real internal font-family name + bold/italic flags.
-        # libass matches fonts by internal family name, not filename, so "HelveObl"
-        # would not be found — we must use "Arial" (or "Arial Narrow" / "Arial Black").
-        _HELVE_MAP = {
-            'Helve':          ('Arial',        0, 0),
-            'HelveLig':       ('Arial',        0, 0),
-            'Helvetica':      ('Arial',        0, 0),
-            'HelveLigObl':    ('Arial',        0, 1),
-            'HelveObl':       ('Arial',        0, 1),
-            'HelveBol':       ('Arial',        1, 0),
-            'Helvetica-Bold': ('Arial',        1, 0),
-            'HelveBolObl':    ('Arial',        1, 1),
-            'HelveBla':       ('Arial Black',  0, 0),
-            'HelveBlaObl':    ('Arial Black',  0, 1),
-            'HelveCon':       ('Arial Narrow', 0, 0),
-            'HelveConLig':    ('Arial Narrow', 0, 0),
-            'HelveConObl':    ('Arial Narrow', 0, 1),
-            'HelveConLigObl': ('Arial Narrow', 0, 1),
-            'HelveConBol':    ('Arial Narrow', 1, 0),
-            'HelveConBla':    ('Arial Narrow', 1, 0),
-            'HelveConBolObl': ('Arial Narrow', 1, 1),
-            'HelveConBlaObl': ('Arial Narrow', 1, 1),
+        # Map font file stem → (internal family name, bold, italic)
+        # Internal names come from fc-query on the actual TTF/OTF files in data/fonts/
+        _FONT_MAP = {
+            'Helvetica':             ('Helvetica',            0, 0),
+            'Helvetica-Bold':        ('Helvetica',            1, 0),
+            'Helvetica-Oblique':     ('Helvetica',            0, 1),
+            'Helvetica-BoldOblique': ('Helvetica',            1, 1),
+            'Helvetica-Light':       ('Helvetica Light',      0, 0),
+            'Helvetica-Compressed':  ('Helvetica Compressed', 0, 0),
+            'Helvetica-RoundedBold': ('Helvetica Rounded',    1, 0),
         }
-        if font_family and font_family in _HELVE_MAP:
-            real_family, bold_flag, italic_flag = _HELVE_MAP[font_family]
+        if font_family and font_family in _FONT_MAP:
+            real_family, bold_flag, italic_flag = _FONT_MAP[font_family]
             opts["fontname"] = real_family
             opts["bold"]     = bold_flag
             opts["italic"]   = italic_flag
         elif font_family:
             fn_lower = font_family.lower()
-            if "bla" in fn_lower or "bol" in fn_lower:
+            if "bold" in fn_lower or "black" in fn_lower:
                 opts["bold"] = 1
-            if "obl" in fn_lower or "ita" in fn_lower:
+            if "oblique" in fn_lower or "italic" in fn_lower:
                 opts["italic"] = 1
         
         # ASS header với style
