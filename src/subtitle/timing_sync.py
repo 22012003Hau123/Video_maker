@@ -142,6 +142,16 @@ class TimingSync:
                         "start": getattr(w, "start", 0.0),
                         "end": getattr(w, "end", 0.0)
                     })
+
+        # Whisper thường gán start=0.0 cho word đầu tiên dù speech thực ra bắt đầu muộn hơn.
+        # Ước tính start thực từ word end và thời lượng trung bình của các word tiếp theo.
+        if word_timings and word_timings[0]["start"] == 0.0 and len(word_timings) > 1:
+            subsequent = word_timings[1:min(4, len(word_timings))]
+            avg_dur = sum(w["end"] - w["start"] for w in subsequent) / len(subsequent)
+            estimated_start = max(0.05, word_timings[0]["end"] - avg_dur)
+            if estimated_start > 0.05:
+                logger.info(f"First word '{word_timings[0]['word']}' start adjusted 0.0→{estimated_start:.2f}s (end={word_timings[0]['end']:.2f}s, avg_word_dur={avg_dur:.2f}s)")
+                word_timings[0]["start"] = estimated_start
         
         segments = []
         word_idx = 0
