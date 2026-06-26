@@ -111,6 +111,14 @@ class SubtitleRenderer:
             margin_v = video_format.subtitle_margin_bottom
         outline_color = opts.get("outline_color_ass", "&H00000000")
         border_style = opts.get("border_style", 1)
+
+        # Derive bold/italic flags from font name (e.g. HelveBol, HelveObl)
+        fn_lower = (font_family or "").lower()
+        if fn_lower:
+            if "bla" in fn_lower or "bol" in fn_lower:
+                opts["bold"] = 1
+            if "obl" in fn_lower or "ita" in fn_lower:
+                opts["italic"] = 1
         
         # ASS header với style
         ass_content = f"""[Script Info]

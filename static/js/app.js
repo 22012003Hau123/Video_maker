@@ -1349,8 +1349,16 @@ function updateSubPreview() {
     const scaledSize   = Math.round(fontSize * scale);
     const scaledMargin = Math.round(marginV  * scale);
 
+    // Derive font-style / font-weight from font name since many files are shared
+    const fn = (fontFamily || '').toLowerCase();
+    const isOblique = fn.includes('obl') || fn.includes('ita');
+    const isBlack   = fn.includes('bla');
+    const isBold    = isBlack || fn.includes('bol');
+
     textEl.style.fontFamily = fontFamily ? `"${fontFamily}", Helvetica, Arial, sans-serif`
                                          : 'Helvetica, Arial, sans-serif';
+    textEl.style.fontStyle  = isOblique ? 'oblique' : 'normal';
+    textEl.style.fontWeight = isBlack ? '900' : isBold ? 'bold' : 'normal';
     textEl.style.fontSize   = scaledSize + 'px';
     textEl.style.textShadow = `0 ${Math.round(2*scale)}px ${Math.round(12*scale)}px rgba(0,0,0,0.55)`;
 
