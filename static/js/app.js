@@ -221,6 +221,20 @@ function switchMode(mode) {
     if (mode === 'master' && typeof loadGoldManifest === 'function') {
         loadGoldManifest();
     }
+
+    // Clear shared preview player when switching to Legal (avoid stale sub preview)
+    if (mode === 'legal') {
+        const player = document.getElementById('main-preview-player');
+        const img    = document.getElementById('main-preview-img');
+        const ph     = document.getElementById('main-preview-placeholder');
+        if (player) { player.src = ''; player.className = ''; }
+        if (img)    { img.src = ''; img.className = ''; }
+        if (ph)     { ph.style.display = ''; ph.innerHTML = '<i class="ph ph-film-strip"></i><p data-i18n="preview.placeholder">Upload a video to preview</p>'; }
+        // Also hide sub live preview overlay
+        const cbEl = document.getElementById('sub-preview-enabled');
+        if (cbEl) cbEl.checked = false;
+        toggleSubPreview(false);
+    }
 }
 
 // Legacy compat (used by switchMasterSubtab → switchTab)
