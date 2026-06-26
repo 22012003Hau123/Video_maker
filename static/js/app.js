@@ -163,7 +163,7 @@ const I18N = {
 };
 
 let currentLang = 'en';
-let _subPreviewSrc = ''; // saved when leaving Sub so we can restore on return
+let _subPreviewSrc = ''; // tracks the URL last passed to showPlayer() in Sub context
 
 function setLang(lang) {
     currentLang = lang;
@@ -218,15 +218,13 @@ function switchMode(mode) {
         lbl.textContent = dict['mode.' + mode] || MODE_LABELS[mode] || mode;
     }
 
-    // Save Sub preview before leaving, restore when returning
+    // Preview state management when switching panels
     const player = document.getElementById('main-preview-player');
     const img    = document.getElementById('main-preview-img');
     const ph     = document.getElementById('main-preview-placeholder');
 
     if (mode === 'legal') {
-        // Save current sub preview src (may be empty if nothing uploaded yet)
-        _subPreviewSrc = player?.src || '';
-        // Clear preview for Legal's own context
+        // Clear shared preview for Legal's own context
         if (player) { player.src = ''; player.className = ''; }
         if (img)    { img.src = ''; img.className = ''; }
         if (ph)     { ph.style.display = ''; ph.innerHTML = '<i class="ph ph-film-strip"></i><p data-i18n="preview.placeholder">Upload a video to preview</p>'; }
@@ -236,10 +234,12 @@ function switchMode(mode) {
         toggleSubPreview(false);
     }
 
-    if (mode === 'sub' && _subPreviewSrc) {
-        // Restore sub preview when coming back
-        if (player) { player.src = _subPreviewSrc; player.className = 'active'; }
-        if (ph)     ph.style.display = 'none';
+    if (mode === 'sub') {
+        if (_subPreviewSrc) {
+            // Restore sub preview from last known URL
+            if (player) { player.src = _subPreviewSrc; player.className = 'active'; player.load(); }
+            if (ph)     ph.style.display = 'none';
+        }
     }
 
     // Load Gold manifest when entering Master
@@ -455,6 +455,7 @@ async function updatePreview(input) {
     const isMov = ext === 'mov' || ext === 'qt';
 
     function showPlayer(src) {
+        _subPreviewSrc = src; // track for tab-switch restore
         if (player) { player.src = src; player.className = 'active'; }
         if (img)    img.className = '';
         if (placeholder) placeholder.style.display = 'none';
