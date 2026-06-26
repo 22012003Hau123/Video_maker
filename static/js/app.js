@@ -234,7 +234,7 @@ function switchMode(mode) {
         toggleSubPreview(false);
     }
 
-    if (mode === 'sub') {
+    if (mode === 'subtitle') {
         if (_subPreviewSrc) {
             // Restore src (may have been replaced by a Legal result video)
             if (player) { player.src = _subPreviewSrc; player.className = 'active'; }
