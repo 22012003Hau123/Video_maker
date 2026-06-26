@@ -256,8 +256,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             
             # Build FFmpeg command
             if use_ass:
-                # ASS có styling, dùng filter ass
-                subtitle_filter = f"ass={ffmpeg_sub_path}"
+                # ASS có styling, dùng filter ass + fontsdir để libass tìm được custom fonts
+                fonts_dir = str(self.font_manager.fonts_dir).replace('\\', '/')
+                subtitle_filter = f"ass={ffmpeg_sub_path}:fontsdir={fonts_dir}"
             else:
                 # SRT dùng subtitles filter với force_style
                 font_opts = self.font_manager.get_ffmpeg_font_options(language, vf.name)

@@ -1309,24 +1309,57 @@ function updateSubPreview() {
     if (!overlay || !textEl) return;
     if (!document.getElementById('sub-preview-enabled')?.checked) return;
 
-    const player    = document.getElementById('main-preview-player');
-    const format    = document.getElementById('sub-video-format')?.value || '16x9';
+    const player     = document.getElementById('main-preview-player');
+    const format     = document.getElementById('sub-video-format')?.value || '16x9';
     const fontFamily = document.getElementById('font-family-select')?.value || 'Helvetica';
-    const fontSize  = parseInt(document.getElementById('sub-font-size')?.value || '48');
-    const marginV   = parseInt(document.getElementById('sub-margin-v')?.value || '30');
+    const fontSize   = parseInt(document.getElementById('sub-font-size')?.value  || '48');
+    const marginV    = parseInt(document.getElementById('sub-margin-v')?.value   || '30');
+    const def        = FORMAT_DEFAULTS[format] || FORMAT_DEFAULTS['16x9'];
 
-    const def = FORMAT_DEFAULTS[format] || FORMAT_DEFAULTS['16x9'];
-    const pW  = player.clientWidth  || 640;
-    const scale = pW / def.refW;
+    // Find where the video content actually renders inside the element
+    // (object-fit: contain may leave black bars inside the <video> element)
+    const wrapper     = player.parentElement;
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const playerRect  = player.getBoundingClientRect();
 
+    const vidW = player.videoWidth  || def.refW;
+    const vidH = player.videoHeight || def.refH;
+    const videoAspect = vidW / vidH;
+    const elemAspect  = playerRect.width / (playerRect.height || 1);
+
+    let contentW, contentH, contentLeft, contentBottom;
+
+    if (videoAspect > elemAspect) {
+        // Letterbox: black bars top & bottom inside the player element
+        contentW = playerRect.width;
+        contentH = playerRect.width / videoAspect;
+        const barH = (playerRect.height - contentH) / 2;
+        contentLeft   = playerRect.left  - wrapperRect.left;
+        contentBottom = (wrapperRect.bottom - playerRect.bottom) + barH;
+    } else {
+        // Pillarbox: black bars left & right inside the player element
+        contentH = playerRect.height;
+        contentW = playerRect.height * videoAspect;
+        const barW = (playerRect.width - contentW) / 2;
+        contentLeft   = (playerRect.left - wrapperRect.left) + barW;
+        contentBottom = wrapperRect.bottom - playerRect.bottom;
+    }
+
+    const scale        = contentW / def.refW;
     const scaledSize   = Math.round(fontSize * scale);
     const scaledMargin = Math.round(marginV  * scale);
 
-    textEl.style.fontFamily  = `"${fontFamily}", Helvetica, Arial, sans-serif`;
-    textEl.style.fontSize    = scaledSize + 'px';
-    textEl.style.textShadow  = `0 ${Math.round(2*scale)}px ${Math.round(12*scale)}px rgba(0,0,0,0.55)`;
-    overlay.style.bottom     = scaledMargin + 'px';
-    overlay.style.display    = 'block';
+    textEl.style.fontFamily = fontFamily ? `"${fontFamily}", Helvetica, Arial, sans-serif`
+                                         : 'Helvetica, Arial, sans-serif';
+    textEl.style.fontSize   = scaledSize + 'px';
+    textEl.style.textShadow = `0 ${Math.round(2*scale)}px ${Math.round(12*scale)}px rgba(0,0,0,0.55)`;
+
+    // Position overlay to exactly cover the rendered video content
+    overlay.style.left    = contentLeft + 'px';
+    overlay.style.right   = 'auto';
+    overlay.style.width   = contentW + 'px';
+    overlay.style.bottom  = (contentBottom + scaledMargin) + 'px';
+    overlay.style.display = 'block';
 }
 
 function toggleSubPreview(on) {
