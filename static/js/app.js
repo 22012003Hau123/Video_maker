@@ -224,9 +224,9 @@ function switchMode(mode) {
     const ph     = document.getElementById('main-preview-placeholder');
 
     if (mode === 'legal') {
-        // Clear shared preview for Legal's own context
-        if (player) { player.src = ''; player.className = ''; }
-        if (img)    { img.src = ''; img.className = ''; }
+        // Hide sub video visually only — do NOT clear src so restore is instant
+        if (player) player.className = '';
+        if (img)    img.className = '';
         if (ph)     { ph.style.display = ''; ph.innerHTML = '<i class="ph ph-film-strip"></i><p data-i18n="preview.placeholder">Upload a video to preview</p>'; }
         // Hide sub live preview overlay
         const cbEl = document.getElementById('sub-preview-enabled');
@@ -236,8 +236,8 @@ function switchMode(mode) {
 
     if (mode === 'sub') {
         if (_subPreviewSrc) {
-            // Restore sub preview from last known URL
-            if (player) { player.src = _subPreviewSrc; player.className = 'active'; player.load(); }
+            // Restore src (may have been replaced by a Legal result video)
+            if (player) { player.src = _subPreviewSrc; player.className = 'active'; }
             if (ph)     ph.style.display = 'none';
         }
     }
