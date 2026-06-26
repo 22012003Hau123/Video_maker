@@ -112,9 +112,36 @@ class SubtitleRenderer:
         outline_color = opts.get("outline_color_ass", "&H00000000")
         border_style = opts.get("border_style", 1)
 
-        # Derive bold/italic flags from font name (e.g. HelveBol, HelveObl)
-        fn_lower = (font_family or "").lower()
-        if fn_lower:
+        # Map Helve* aliases to their real internal font-family name + bold/italic flags.
+        # libass matches fonts by internal family name, not filename, so "HelveObl"
+        # would not be found — we must use "Arial" (or "Arial Narrow" / "Arial Black").
+        _HELVE_MAP = {
+            'Helve':          ('Arial',        0, 0),
+            'HelveLig':       ('Arial',        0, 0),
+            'Helvetica':      ('Arial',        0, 0),
+            'HelveLigObl':    ('Arial',        0, 1),
+            'HelveObl':       ('Arial',        0, 1),
+            'HelveBol':       ('Arial',        1, 0),
+            'Helvetica-Bold': ('Arial',        1, 0),
+            'HelveBolObl':    ('Arial',        1, 1),
+            'HelveBla':       ('Arial Black',  0, 0),
+            'HelveBlaObl':    ('Arial Black',  0, 1),
+            'HelveCon':       ('Arial Narrow', 0, 0),
+            'HelveConLig':    ('Arial Narrow', 0, 0),
+            'HelveConObl':    ('Arial Narrow', 0, 1),
+            'HelveConLigObl': ('Arial Narrow', 0, 1),
+            'HelveConBol':    ('Arial Narrow', 1, 0),
+            'HelveConBla':    ('Arial Narrow', 1, 0),
+            'HelveConBolObl': ('Arial Narrow', 1, 1),
+            'HelveConBlaObl': ('Arial Narrow', 1, 1),
+        }
+        if font_family and font_family in _HELVE_MAP:
+            real_family, bold_flag, italic_flag = _HELVE_MAP[font_family]
+            opts["fontname"] = real_family
+            opts["bold"]     = bold_flag
+            opts["italic"]   = italic_flag
+        elif font_family:
+            fn_lower = font_family.lower()
             if "bla" in fn_lower or "bol" in fn_lower:
                 opts["bold"] = 1
             if "obl" in fn_lower or "ita" in fn_lower:
