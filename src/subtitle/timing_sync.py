@@ -94,13 +94,18 @@ class TimingSync:
         detected_lang = result.get("language", language)
         segments = []
         for seg in result.get("segments", []):
+            no_speech_prob = seg.get("no_speech_prob", 0)
+            text = seg["text"].strip()
+            if no_speech_prob > 0.6 or not text:
+                logger.info(f"Skipping hallucinated segment [{seg['start']:.2f}s]: no_speech_prob={no_speech_prob:.2f} text={text[:40]!r}")
+                continue
             segments.append(TranscriptSegment(
                 start=seg["start"],
                 end=seg["end"],
-                text=seg["text"].strip(),
-                confidence=seg.get("no_speech_prob", 0)
+                text=text,
+                confidence=no_speech_prob
             ))
-        
+
         return segments, detected_lang, []
     
     def _transcribe_api(self, audio_path: str, language: str, prompt: Optional[str] = None) -> Tuple[List[TranscriptSegment], str, List[dict]]:
@@ -181,8 +186,14 @@ class TimingSync:
                 # Di chuyển word_idx tới segment tiếp theo
                 word_idx = temp_idx
             
+            # Filter hallucinated segments (silence / background music)
+            no_speech_prob = seg.get("no_speech_prob", 0) if isinstance(seg, dict) else getattr(seg, "no_speech_prob", 0)
+            if no_speech_prob > 0.6 or not text:
+                logger.info(f"Skipping hallucinated segment [{seg_start:.2f}s]: no_speech_prob={no_speech_prob:.2f} text={text[:40]!r}")
+                continue
+
             logger.info(f"Segment timing: [{seg_start:.2f}s -> {refined_start:.2f}s] ~ [{seg_end:.2f}s -> {refined_end:.2f}s]: {text[:50]}")
-            
+
             segments.append(TranscriptSegment(
                 start=refined_start,
                 end=refined_end,
