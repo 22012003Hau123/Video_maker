@@ -114,68 +114,72 @@ class LegalDatabase:
                     for rule in data.get('rules', []):
                         for duration_key, duration_config in rule.get('duration_rules', {}).items():
                             # Determine min_duration and sub_type
+                            # "under_30s" → min_duration=0 (applies to short videos)
+                            # "over_30s*"  → min_duration=30 (only for 30s+ videos)
                             min_duration = 0
                             sub_type = None
-                            
-                            if '30s' in duration_key:
+
+                            if duration_key.startswith('over_30s') or duration_key == 'over_30s':
                                 min_duration = 30
-                            elif '60s' in duration_key:
+                            elif duration_key.startswith('over_60s') or duration_key == 'over_60s':
                                 min_duration = 60
                             elif duration_key == 'stories':
                                 sub_type = 'stories'
                             elif duration_key == 'reels':
                                 sub_type = 'reels'
-                            elif duration_key == 'all':
-                                min_duration = 0
-                            
+                            # 'under_30s', 'all', 'under_60s', unknown → min_duration=0
+
                             text = duration_config.get('text', '')
                             text_secondary = duration_config.get('secondary_text', None)
-                            
-                            # Map media types
-                            media_platforms = rule.get('media_types', [])
-                            if not media_platforms and rule.get('platform'):
-                                media_platforms = [rule.get('platform')]
-                            
-                            if not media_platforms: media_platforms = ['social']
 
-                            for platform in media_platforms:
-                                media_type = MediaType.SOCIAL
-                                if platform == 'tv' or platform == 'youtube':
+                            # Use 'platform' field for channel mapping.
+                            # 'media_types' (video/image) is content format — separate concern.
+                            platform_field = rule.get('platform', 'social')
+                            if platform_field == 'all':
+                                # Rule applies to all channels → expand to SOCIAL + TV
+                                channel_list = ['social', 'tv']
+                            else:
+                                channel_list = [platform_field]
+
+                            for platform in channel_list:
+                                if platform in ('tv', 'youtube', 'broadcast'):
                                     media_type = MediaType.TV
                                 elif platform == 'print':
                                     media_type = MediaType.PRINT
                                 elif platform == 'digital':
                                     media_type = MediaType.DIGITAL
-                                elif platform == 'all':
-                                    media_type = MediaType.SOCIAL # Fallback or handle specially
-                                
-                                # Determine display_at from timing or legacy fields
+                                elif platform == 'ooh':
+                                    media_type = MediaType.OOH
+                                else:
+                                    media_type = MediaType.SOCIAL
+
+                                # Determine display_at from timing field
                                 timing = duration_config.get('timing', 'end')
                                 if timing == 'both_5s':
                                     display_at = 'both'
                                 elif timing == 'first_5s':
                                     display_at = 'start'
-                                elif timing == 'last_5s':
+                                elif timing in ('last_5s', 'end'):
                                     display_at = 'end'
                                 elif timing == 'entire_duration':
                                     display_at = 'entire'
                                 else:
-                                    # Legacy check
                                     if duration_config.get('show_at_start') and duration_config.get('show_at_end'):
                                         display_at = 'both'
                                     elif duration_config.get('show_at_start'):
                                         display_at = 'start'
                                     else:
                                         display_at = 'end'
-                                
+
                                 style = rule.get('style', {})
                                 rule_type = rule.get('type', 'alcohol')
-                                
-                                usage_type_str = rule.get('usage_type', 'paid')
+
+                                # Default usage_type to 'shareable' (most common UI choice)
+                                usage_type_str = rule.get('usage_type', 'shareable')
                                 try:
                                     usage_type = UsageType(usage_type_str)
-                                except:
-                                    usage_type = UsageType.PAID
+                                except Exception:
+                                    usage_type = UsageType.SHAREABLE
 
                                 legal_contents.append(LegalContent(
                                     country_code=country_code,
