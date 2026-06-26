@@ -163,6 +163,7 @@ const I18N = {
 };
 
 let currentLang = 'en';
+let _subPreviewSrc = ''; // saved when leaving Sub so we can restore on return
 
 function setLang(lang) {
     currentLang = lang;
@@ -217,23 +218,33 @@ function switchMode(mode) {
         lbl.textContent = dict['mode.' + mode] || MODE_LABELS[mode] || mode;
     }
 
-    // Load Gold manifest when entering Master
-    if (mode === 'master' && typeof loadGoldManifest === 'function') {
-        loadGoldManifest();
-    }
+    // Save Sub preview before leaving, restore when returning
+    const player = document.getElementById('main-preview-player');
+    const img    = document.getElementById('main-preview-img');
+    const ph     = document.getElementById('main-preview-placeholder');
 
-    // Clear shared preview player when switching to Legal (avoid stale sub preview)
     if (mode === 'legal') {
-        const player = document.getElementById('main-preview-player');
-        const img    = document.getElementById('main-preview-img');
-        const ph     = document.getElementById('main-preview-placeholder');
+        // Save current sub preview src (may be empty if nothing uploaded yet)
+        _subPreviewSrc = player?.src || '';
+        // Clear preview for Legal's own context
         if (player) { player.src = ''; player.className = ''; }
         if (img)    { img.src = ''; img.className = ''; }
         if (ph)     { ph.style.display = ''; ph.innerHTML = '<i class="ph ph-film-strip"></i><p data-i18n="preview.placeholder">Upload a video to preview</p>'; }
-        // Also hide sub live preview overlay
+        // Hide sub live preview overlay
         const cbEl = document.getElementById('sub-preview-enabled');
         if (cbEl) cbEl.checked = false;
         toggleSubPreview(false);
+    }
+
+    if (mode === 'sub' && _subPreviewSrc) {
+        // Restore sub preview when coming back
+        if (player) { player.src = _subPreviewSrc; player.className = 'active'; }
+        if (ph)     ph.style.display = 'none';
+    }
+
+    // Load Gold manifest when entering Master
+    if (mode === 'master' && typeof loadGoldManifest === 'function') {
+        loadGoldManifest();
     }
 }
 
