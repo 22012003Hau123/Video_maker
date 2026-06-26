@@ -1623,6 +1623,13 @@ async function pollJobStatus(jobId, statusBoxId) {
             `;
 
             if (job.status === 'completed') {
+                // Hide live preview when subtitle render finishes
+                if (statusBoxId === 'subtitle-status') {
+                    const cbEl = document.getElementById('sub-preview-enabled');
+                    if (cbEl) cbEl.checked = false;
+                    toggleSubPreview(false);
+                }
+
                 const downloadUrl = `/api/download/${jobId}?t=${Date.now()}`;
                 const resultPath  = (job.result_path || '').toLowerCase();
                 const isVideo     = /\.(mp4|mov|qt|mkv|avi|webm)$/.test(resultPath);
