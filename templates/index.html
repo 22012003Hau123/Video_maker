@@ -241,7 +241,7 @@
                     <div class="grid-3">
                         <div class="field">
                             <label data-i18n="legal.country">Country</label>
-                            <select name="country_code">
+                            <select name="country_code" onchange="updateLegalComboDesc()">
                                 <option value="DE">🇩🇪 Germany</option>
                                 <option value="UK">🇬🇧 UK</option>
                                 <option value="IT">🇮🇹 Italy</option>
@@ -250,21 +250,25 @@
                         </div>
                         <div class="field">
                             <label data-i18n="legal.media_type">Media Type</label>
-                            <select name="media_type">
+                            <select name="media_type" onchange="updateLegalComboDesc()">
                                 <option value="social" data-i18n="legal.social">Social Media</option>
                                 <option value="tv" data-i18n="legal.tv">TV / Broadcast</option>
                             </select>
                         </div>
                         <div class="field">
                             <label data-i18n="legal.usage_type">Usage Type</label>
-                            <select name="usage_type">
+                            <select name="usage_type" onchange="updateLegalComboDesc()">
                                 <option value="shareable" data-i18n="legal.shareable">Shareable</option>
                                 <option value="non_shareable" data-i18n="legal.non_shareable">Non-Shareable</option>
                             </select>
                         </div>
                     </div>
 
-                    <div class="grid-2" style="margin-top:0.25rem;">
+                    <!-- Legal combination description -->
+                    <div id="legal-combo-desc" style="display:none;margin-top:0.5rem;padding:0.55rem 0.7rem;background:var(--panel-light);border:1px solid var(--border);border-radius:var(--radius);font-size:0.76rem;line-height:1.5;color:var(--text-muted);">
+                    </div>
+
+                    <div class="grid-2" style="margin-top:0.5rem;">
                         <div class="field" id="legal-subtype-group">
                             <label data-i18n="legal.post_type">Post Type (9:16)</label>
                             <select name="sub_type">

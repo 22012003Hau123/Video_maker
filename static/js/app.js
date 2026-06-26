@@ -1772,6 +1772,54 @@ async function pollJobStatus(jobId, statusBoxId) {
     poll();
 }
 
+// ── LEGAL COMBO DESCRIPTION ───────────────────────────────────
+function updateLegalComboDesc() {
+    const form    = document.querySelector('#panel-legal form');
+    const descEl  = document.getElementById('legal-combo-desc');
+    if (!form || !descEl) return;
+
+    const country = form.querySelector('[name=country_code]')?.value || '';
+    const media   = form.querySelector('[name=media_type]')?.value   || '';
+    const usage   = form.querySelector('[name=usage_type]')?.value   || '';
+
+    const COUNTRY = {
+        DE: { en: '🇩🇪 Germany — strict alcohol advertising law (LBO). Disclaimer mandatory on all formats.',
+              fr: '🇩🇪 Allemagne — loi stricte sur la pub alcool (LBO). Mention obligatoire sur tous les formats.' },
+        UK: { en: '🇬🇧 UK — ASA / CAP rules. "Please drink responsibly" required on paid and organic content.',
+              fr: '🇬🇧 Royaume-Uni — règles ASA/CAP. Mention "Buvez avec modération" requise sur tout contenu.' },
+        IT: { en: '🇮🇹 Italy — AGCOM regulations. Alcohol disclaimer required, especially for social platforms.',
+              fr: '🇮🇹 Italie — règlement AGCOM. Mention alcool obligatoire, particulièrement sur les réseaux sociaux.' },
+        US: { en: '🇺🇸 United States — TTB & FTC rules. "Drink responsibly" standard; stricter rules per state.',
+              fr: '🇺🇸 États-Unis — règles TTB & FTC. "Consommez avec modération" standard ; règles plus strictes par État.' },
+    };
+    const MEDIA = {
+        social: { en: '📱 Social Media — applies to Instagram, TikTok, Facebook, YouTube Shorts.',
+                  fr: "📱 Réseaux sociaux — s'applique à Instagram, TikTok, Facebook, YouTube Shorts." },
+        tv:     { en: '📺 TV / Broadcast — applies to linear TV spots and online pre-roll ads.',
+                  fr: "📺 TV / Diffusion — s'applique aux spots TV linéaires et pré-rolls en ligne." },
+    };
+    const USAGE = {
+        shareable:     { en: '🔁 Shareable — content users can repost/share. Legal text must remain fully visible when shared.',
+                         fr: '🔁 Partageable — contenu que les utilisateurs peuvent repartager. La mention légale doit rester visible.' },
+        non_shareable: { en: '🔒 Non-Shareable — brand-owned display only (pinned posts, paid placements). Shorter disclaimer allowed.',
+                         fr: '🔒 Non-partageable — affichage uniquement sur la page de marque (posts épinglés, placements payants). Mention courte acceptée.' },
+    };
+
+    const lang = currentLang === 'fr' ? 'fr' : 'en';
+    const lines = [
+        COUNTRY[country]?.[lang],
+        MEDIA[media]?.[lang],
+        USAGE[usage]?.[lang],
+    ].filter(Boolean);
+
+    if (lines.length) {
+        descEl.innerHTML = lines.map(l => `<div style="margin-bottom:0.25rem;">${l}</div>`).join('');
+        descEl.style.display = '';
+    } else {
+        descEl.style.display = 'none';
+    }
+}
+
 // ── FORMAT INFO ───────────────────────────────────────────────
 function updateFormatInfo(val) {
     const infoText = document.getElementById('format-info-text');
