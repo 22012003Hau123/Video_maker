@@ -740,7 +740,6 @@ def _create_premiere_package_dirs(job_id: str) -> Dict[str, Path]:
         "video": root / "video",
         "audio": root / "audio",
         "subtitles": root / "subtitles",
-        "timeline": root / "timeline",
         "legal": root / "legal",
         "premiere_script": root / "premiere_script",
     }
