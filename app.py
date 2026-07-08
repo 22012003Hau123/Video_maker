@@ -731,6 +731,212 @@ var CONFIG = {config_json};
     return str(jsx_path)
 
 
+# ── PREMIERE PACKAGE HELPERS ──────────────────────────────────────────────────
+
+def _create_premiere_package_dirs(job_id: str) -> Dict[str, Path]:
+    root = OUTPUT_DIR / "premiere_packages" / f"premiere_package_{job_id}"
+    paths = {
+        "root": root,
+        "video": root / "video",
+        "audio": root / "audio",
+        "subtitles": root / "subtitles",
+        "timeline": root / "timeline",
+        "legal": root / "legal",
+        "premiere_script": root / "premiere_script",
+    }
+    for path in paths.values():
+        path.mkdir(parents=True, exist_ok=True)
+    return paths
+
+
+def _write_fcpxml_for_premiere(
+    output_path: Path,
+    aligned: List[tuple],
+    language: str,
+    video_filename: str,
+    metadata: Dict[str, Any],
+) -> str:
+    width    = int(metadata.get("width") or 1920)
+    height   = int(metadata.get("height") or 1080)
+    fps      = float(metadata.get("fps") or 25.0)
+    duration = float(metadata.get("duration") or 0.0)
+    fps_int  = max(1, round(fps))
+    dur_str  = f"{duration:.3f}s"
+    # relative src: premiere_script/ is one level inside package root
+    video_src = f"file:../video/{video_filename}"
+
+    captions_xml = []
+    for start, end, text in aligned:
+        s = float(start)
+        d = max(0.05, float(end) - s)
+        esc = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+        captions_xml.append(
+            f'              <caption lane="-1" offset="{s:.3f}s" duration="{d:.3f}s" role="caption:RC.{language}-{language.upper()}">\n'
+            f'                <text>{esc}</text>\n'
+            f'              </caption>'
+        )
+
+    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fcpxml>
+<fcpxml version="1.10">
+  <resources>
+    <format id="r1" frameDuration="1/{fps_int}s" width="{width}" height="{height}"/>
+    <asset id="r2" name="source_video" src="{video_src}" duration="{dur_str}" hasVideo="1" hasAudio="1">
+      <media-rep kind="original-media" src="{video_src}"/>
+    </asset>
+  </resources>
+  <library>
+    <event name="Subtitles — {language.upper()}">
+      <project name="Sequence_{language.upper()}_{width}x{height}">
+        <sequence duration="{dur_str}" format="r1" tcStart="0s" tcFormat="NDF">
+          <spine>
+            <asset-clip ref="r2" offset="0s" duration="{dur_str}" name="source_video">
+{chr(10).join(captions_xml)}
+            </asset-clip>
+          </spine>
+        </sequence>
+      </project>
+    </event>
+  </library>
+</fcpxml>
+"""
+    output_path.write_text(xml, encoding="utf-8")
+    return str(output_path)
+
+
+def _write_legal_fcpxml_for_premiere(
+    output_path: Path,
+    cues: List[Dict[str, Any]],
+    video_filename: str,
+    metadata: Dict[str, Any],
+) -> str:
+    width    = int(metadata.get("width") or 1920)
+    height   = int(metadata.get("height") or 1080)
+    fps      = float(metadata.get("fps") or 25.0)
+    duration = float(metadata.get("duration") or 0.0)
+    fps_int  = max(1, round(fps))
+    dur_str  = f"{duration:.3f}s"
+    video_src = f"file:../video/{video_filename}"
+
+    captions_xml = []
+    for i, cue in enumerate(cues):
+        s = float(cue.get("start") or 0)
+        d = max(0.05, float(cue.get("end") or s + 3) - s)
+        text = cue.get("text") or ""
+        esc = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+        captions_xml.append(
+            f'              <caption lane="-1" offset="{s:.3f}s" duration="{d:.3f}s" role="caption:RC.en-US">\n'
+            f'                <text>{esc}</text>\n'
+            f'              </caption>'
+        )
+
+    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE fcpxml>
+<fcpxml version="1.10">
+  <resources>
+    <format id="r1" frameDuration="1/{fps_int}s" width="{width}" height="{height}"/>
+    <asset id="r2" name="source_video" src="{video_src}" duration="{dur_str}" hasVideo="1" hasAudio="1">
+      <media-rep kind="original-media" src="{video_src}"/>
+    </asset>
+  </resources>
+  <library>
+    <event name="Legal Overlay">
+      <project name="Legal_Sequence_{width}x{height}">
+        <sequence duration="{dur_str}" format="r1" tcStart="0s" tcFormat="NDF">
+          <spine>
+            <asset-clip ref="r2" offset="0s" duration="{dur_str}" name="source_video">
+{chr(10).join(captions_xml)}
+            </asset-clip>
+          </spine>
+        </sequence>
+      </project>
+    </event>
+  </library>
+</fcpxml>
+"""
+    output_path.write_text(xml, encoding="utf-8")
+    return str(output_path)
+
+
+def _write_premiere_jsx_script(
+    script_dir: Path,
+    job_id: str,
+    audio_rel_path: str,
+    fcpxml_filenames: List[str],
+) -> str:
+    config = {
+        "job_id": job_id,
+        "audio_rel_path": audio_rel_path,
+        "fcpxml_files": fcpxml_filenames,
+    }
+    config_json = json.dumps(config, ensure_ascii=False)
+
+    jsx_content = f"""/* Auto-generated by Video Subtitles Automation — Premiere Package */
+var CONFIG = {config_json};
+
+(function () {{
+    if (typeof app === "undefined" || !app.project) {{
+        alert("Run this script inside Adobe Premiere Pro (File > Scripts > Run Script File).");
+        return;
+    }}
+
+    var scriptFile = new File($.fileName);
+    var scriptDir  = scriptFile.parent;
+    var packageRoot = scriptDir.parent;
+
+    function joinPath(base, rel) {{
+        var b = String(base || "").replace(/\\\\/g, "/").replace(/\/+$/, "");
+        var r = String(rel  || "").replace(/\\\\/g, "/").replace(/^\/+/, "");
+        return b + "/" + r;
+    }}
+
+    // 1. Import master audio into project bin
+    var importArr = [];
+    if (CONFIG.audio_rel_path) {{
+        var af = new File(joinPath(packageRoot.fsName, CONFIG.audio_rel_path));
+        if (af.exists) importArr.push(af.fsName);
+    }}
+    if (importArr.length) {{
+        app.project.importFiles(importArr, 1, app.project.rootItem, 0);
+    }}
+
+    // 2. Import FCPXML files — each creates a Premiere sequence automatically
+    var imported = 0;
+    for (var i = 0; i < CONFIG.fcpxml_files.length; i++) {{
+        var fcpFile = new File(joinPath(scriptDir.fsName, CONFIG.fcpxml_files[i]));
+        if (fcpFile.exists) {{
+            app.project.importFile(fcpFile.fsName);
+            imported++;
+        }}
+    }}
+
+    var msg = "Premiere Package imported!\\n\\n";
+    msg += imported + " sequence(s) created from FCPXML.\\n";
+    msg += "Master audio imported into Project panel.\\n\\n";
+    msg += "If media appears offline, right-click > Link Media\\n";
+    msg += "and point to the video/ folder in this package.";
+    alert(msg);
+}})();
+"""
+    jsx_path = script_dir / f"import_premiere_{job_id}.jsx"
+    jsx_path.write_text(jsx_content, encoding="utf-8")
+    return str(jsx_path)
+
+
+def _write_legal_premiere_jsx_script(
+    script_dir: Path,
+    job_id: str,
+    audio_rel_path: str,
+    fcpxml_filename: str,
+) -> str:
+    return _write_premiere_jsx_script(
+        script_dir=script_dir,
+        job_id=job_id,
+        audio_rel_path=audio_rel_path,
+        fcpxml_filenames=[fcpxml_filename],
+    )
+
+
 def _write_ae_jsx_script(
     package_root: Path,
     script_dir: Path,
@@ -876,16 +1082,22 @@ async def process_subtitles(
         
         sync = TimingSync()
         result_files = []
-        ae_package_mode = export_format == "ae_package"
-        render_export_format = "prores" if ae_package_mode else export_format
+        ae_package_mode       = export_format == "ae_package"
+        premiere_package_mode = export_format == "premiere_package"
+        render_export_format  = "prores" if (ae_package_mode or premiere_package_mode) else export_format
         wav_path = None
         ae_lang_entries: List[Dict[str, Any]] = []
-        if ae_package_mode:
+        premiere_lang_entries: List[Dict[str, Any]] = []
+        if ae_package_mode or premiere_package_mode:
             export_video = True
             export_srt = True
-        ae_paths = _create_ae_package_dirs(job_id) if ae_package_mode else {}
-        video_meta = _probe_video_metadata(video_path) if ae_package_mode else {}
-        
+        ae_paths = (
+            _create_ae_package_dirs(job_id) if ae_package_mode
+            else _create_premiere_package_dirs(job_id) if premiere_package_mode
+            else {}
+        )
+        video_meta = _probe_video_metadata(video_path) if (ae_package_mode or premiere_package_mode) else {}
+
         # 1. Trích xuất audio
         update_job(job_id, progress=10, message="Extracting audio from video...")
         audio_path = extract_audio(video_path)
@@ -903,19 +1115,20 @@ async def process_subtitles(
             for seg in transcript
         ]
 
-        if ae_package_mode:
-            update_job(job_id, progress=25, message="Preparing AE package audio (WAV)...")
+        if ae_package_mode or premiere_package_mode:
+            pkg_label = "AE" if ae_package_mode else "Premiere"
+            update_job(job_id, progress=25, message=f"Preparing {pkg_label} package audio (WAV)...")
             wav_output = ae_paths["audio"] / f"{Path(video_path).stem}_master.wav"
             wav_path = _export_wav_for_ae(video_path, wav_output)
             result_files.append(ResultFile(
                 path=wav_path,
                 language="multi",
                 type="audio",
-                label="AE Package - Master WAV"
+                label=f"{pkg_label} Package - Master WAV"
             ))
-        
+
         update_job(job_id, progress=30)
-        
+
         # 4. Xử lý từng ngôn ngữ
         total_langs = len(target_langs)
         renderer = SubtitleRenderer(str(OUTPUT_DIR))
@@ -942,12 +1155,13 @@ async def process_subtitles(
                     # Chọn đuôi file phù hợp (ProRes cần .mov)
                     ext = ".mov" if render_export_format == "prores" else ".mp4"
                     output_filename = f"{Path(video_path).stem}_{lang}{ext}"
+                    is_pkg = ae_package_mode or premiere_package_mode
                     output_path = (
                         str(ae_paths["video"] / output_filename)
-                        if ae_package_mode else
+                        if is_pkg else
                         str(OUTPUT_DIR / output_filename)
                     )
-                    
+
                     output_path = renderer.render(
                         video_path,
                         aligned,
@@ -959,21 +1173,23 @@ async def process_subtitles(
                         font_size=font_size,
                         margin_v=margin_v,
                     )
+                    pkg_label = "AE" if ae_package_mode else "Premiere" if premiere_package_mode else ""
                     result_files.append(ResultFile(
                         path=output_path,
                         language=lang,
                         type="video",
-                        label=f"{lang_name} - {'ProRes Video' if ae_package_mode else 'Video'}"
+                        label=f"{lang_name} - {'ProRes Video' if is_pkg else 'Video'}"
                     ))
                     rendered_video_path = output_path
                 except Exception as e:
                     logger.warning(f"Render {lang} video failed: {e}")
-            
+
             # Export SRT
             if export_srt:
+                is_pkg = ae_package_mode or premiere_package_mode
                 srt_path = (
                     str(ae_paths["subtitles"] / f"{Path(video_path).stem}_{lang}.srt")
-                    if ae_package_mode else
+                    if is_pkg else
                     str(OUTPUT_DIR / f"subtitle_{job_id}_{lang}.srt")
                 )
                 generate_srt(aligned, srt_path)
@@ -1007,15 +1223,29 @@ async def process_subtitles(
                     ),
                     "timeline_rel_path": Path(timeline_path).relative_to(ae_paths["root"]).as_posix(),
                     "segments": [
-                        {
-                            "start": round(float(start), 3),
-                            "end": round(float(end), 3),
-                            "text": text,
-                        }
-                        for start, end, text in aligned
+                        {"start": round(float(s), 3), "end": round(float(e), 3), "text": t}
+                        for s, e, t in aligned
                     ],
                 })
-        
+
+            if premiere_package_mode:
+                video_filename = Path(rendered_video_path).name if rendered_video_path else ""
+                fcpxml_filename = f"sequence_{lang.upper()}.fcpxml"
+                fcpxml_path = _write_fcpxml_for_premiere(
+                    ae_paths["premiere_script"] / fcpxml_filename,
+                    aligned,
+                    language=lang,
+                    video_filename=video_filename,
+                    metadata=video_meta,
+                )
+                result_files.append(ResultFile(
+                    path=fcpxml_path,
+                    language=lang,
+                    type="timeline",
+                    label=f"{lang_name} - Premiere FCPXML"
+                ))
+                premiere_lang_entries.append({"language": lang, "fcpxml_filename": fcpxml_filename})
+
         if not result_files:
             raise ValueError("Không tạo được output nào")
 
@@ -1046,6 +1276,33 @@ async def process_subtitles(
                 language="multi",
                 type="zip",
                 label="AE Package - ZIP"
+            ))
+            primary_result_path = package_zip
+
+        if premiere_package_mode:
+            if wav_path and premiere_lang_entries:
+                try:
+                    jsx_path = _write_premiere_jsx_script(
+                        script_dir=ae_paths["premiere_script"],
+                        job_id=job_id,
+                        audio_rel_path=Path(wav_path).relative_to(ae_paths["root"]).as_posix(),
+                        fcpxml_filenames=[e["fcpxml_filename"] for e in premiere_lang_entries],
+                    )
+                    result_files.append(ResultFile(
+                        path=jsx_path,
+                        language="multi",
+                        type="script",
+                        label="Premiere Package - Auto Import Script (.jsx)"
+                    ))
+                except Exception as e:
+                    logger.warning(f"Failed to generate Premiere JSX script: {e}")
+
+            package_zip = _zip_ae_package(ae_paths["root"])
+            result_files.insert(0, ResultFile(
+                path=package_zip,
+                language="multi",
+                type="zip",
+                label="Premiere Package - ZIP"
             ))
             primary_result_path = package_zip
         
@@ -1084,9 +1341,10 @@ async def process_legal(
         from src.legal.product_detector import ProductDetector
         
         product_type = None
-        ae_package_mode = export_format == "ae_package"
+        ae_package_mode       = export_format == "ae_package"
+        premiere_package_mode = export_format == "premiere_package"
         result_files: List[ResultFile] = []
-        
+
         # 1. Detect product type from video (if enabled)
         if auto_detect_product:
             try:
@@ -1095,39 +1353,39 @@ async def process_legal(
                 logger.info(f"Video detected as: {product_type} ({label}) - {confidence:.2%}")
             except Exception as e:
                 logger.error(f"Product detection failed: {e}")
-            
+
         update_job(job_id, progress=40, message=f"Applying legal rules: {country_code} ({media_type})...")
 
         media_type_enum = MediaType(media_type)
         usage_type_enum = UsageType(usage_type)
 
-        if ae_package_mode:
-            update_job(job_id, progress=55, message="Preparing Legal AE package assets...")
-            ae_paths = _create_ae_package_dirs(job_id)
+        if ae_package_mode or premiere_package_mode:
+            pkg_label = "AE" if ae_package_mode else "Premiere"
+            update_job(job_id, progress=55, message=f"Preparing Legal {pkg_label} package assets...")
+            ae_paths = (
+                _create_ae_package_dirs(job_id) if ae_package_mode
+                else _create_premiere_package_dirs(job_id)
+            )
             video_meta = _probe_video_metadata(video_path)
             video_duration = float(video_meta.get("duration") or 0.0)
 
             source_video_path = ae_paths["video"] / Path(video_path).name
             shutil.copy2(video_path, source_video_path)
-            result_files.append(
-                ResultFile(
-                    path=str(source_video_path),
-                    language="multi",
-                    type="video",
-                    label="Legal AE Package - Source Video",
-                )
-            )
+            result_files.append(ResultFile(
+                path=str(source_video_path),
+                language="multi",
+                type="video",
+                label=f"Legal {pkg_label} Package - Source Video",
+            ))
 
             wav_output = ae_paths["audio"] / f"{Path(video_path).stem}_master.wav"
             wav_path = _export_wav_for_ae(video_path, wav_output)
-            result_files.append(
-                ResultFile(
-                    path=wav_path,
-                    language="multi",
-                    type="audio",
-                    label="Legal AE Package - Master WAV",
-                )
-            )
+            result_files.append(ResultFile(
+                path=wav_path,
+                language="multi",
+                type="audio",
+                label=f"Legal {pkg_label} Package - Master WAV",
+            ))
 
             db = get_legal_database()
             legal_list = db.get_legal_content(
@@ -1140,52 +1398,72 @@ async def process_legal(
             ) or []
             legal_cues = _build_legal_ae_cues(legal_list, video_duration, manual_position=position)
 
-            legal_timeline_path = _write_legal_timeline_json_for_ae(
-                ae_paths["legal"] / f"{Path(video_path).stem}_legal_timeline.json",
-                legal_cues,
-                video_path=video_path,
-                metadata=video_meta,
-                country_code=country_code,
-                media_type=media_type,
-                usage_type=usage_type,
-                sub_type=sub_type,
-            )
-            result_files.append(
-                ResultFile(
+            if ae_package_mode:
+                legal_timeline_path = _write_legal_timeline_json_for_ae(
+                    ae_paths["legal"] / f"{Path(video_path).stem}_legal_timeline.json",
+                    legal_cues,
+                    video_path=video_path,
+                    metadata=video_meta,
+                    country_code=country_code,
+                    media_type=media_type,
+                    usage_type=usage_type,
+                    sub_type=sub_type,
+                )
+                result_files.append(ResultFile(
                     path=legal_timeline_path,
                     language="multi",
                     type="timeline",
                     label="Legal AE Package - Timeline JSON",
+                ))
+                jsx_path = _write_legal_ae_jsx_script(
+                    script_dir=ae_paths["ae_script"],
+                    job_id=job_id,
+                    video_meta=video_meta,
+                    video_rel_path=Path(source_video_path).relative_to(ae_paths["root"]).as_posix(),
+                    audio_rel_path=Path(wav_path).relative_to(ae_paths["root"]).as_posix(),
+                    cues=legal_cues,
                 )
-            )
-
-            jsx_path = _write_legal_ae_jsx_script(
-                script_dir=ae_paths["ae_script"],
-                job_id=job_id,
-                video_meta=video_meta,
-                video_rel_path=Path(source_video_path).relative_to(ae_paths["root"]).as_posix(),
-                audio_rel_path=Path(wav_path).relative_to(ae_paths["root"]).as_posix(),
-                cues=legal_cues,
-            )
-            result_files.append(
-                ResultFile(
+                result_files.append(ResultFile(
                     path=jsx_path,
                     language="multi",
                     type="script",
                     label="Legal AE Package - Auto Import Script (.jsx)",
+                ))
+
+            if premiere_package_mode:
+                fcpxml_filename = f"legal_sequence.fcpxml"
+                fcpxml_path = _write_legal_fcpxml_for_premiere(
+                    ae_paths["premiere_script"] / fcpxml_filename,
+                    legal_cues,
+                    video_filename=Path(source_video_path).name,
+                    metadata=video_meta,
                 )
-            )
+                result_files.append(ResultFile(
+                    path=fcpxml_path,
+                    language="multi",
+                    type="timeline",
+                    label="Legal Premiere Package - FCPXML",
+                ))
+                jsx_path = _write_legal_premiere_jsx_script(
+                    script_dir=ae_paths["premiere_script"],
+                    job_id=job_id,
+                    audio_rel_path=Path(wav_path).relative_to(ae_paths["root"]).as_posix(),
+                    fcpxml_filename=fcpxml_filename,
+                )
+                result_files.append(ResultFile(
+                    path=jsx_path,
+                    language="multi",
+                    type="script",
+                    label="Legal Premiere Package - Auto Import Script (.jsx)",
+                ))
 
             package_zip = _zip_ae_package(ae_paths["root"])
-            result_files.insert(
-                0,
-                ResultFile(
-                    path=package_zip,
-                    language="multi",
-                    type="zip",
-                    label="Legal AE Package - ZIP",
-                ),
-            )
+            result_files.insert(0, ResultFile(
+                path=package_zip,
+                language="multi",
+                type="zip",
+                label=f"Legal {pkg_label} Package - ZIP",
+            ))
             output_path = package_zip
         else:
             overlay = LegalOverlay(str(OUTPUT_DIR))
@@ -2019,16 +2297,22 @@ async def process_subtitles_from_text(
         
         sync = TimingSync()
         result_files = []
-        ae_package_mode = export_format == "ae_package"
-        render_export_format = "prores" if ae_package_mode else export_format
+        ae_package_mode       = export_format == "ae_package"
+        premiere_package_mode = export_format == "premiere_package"
+        render_export_format  = "prores" if (ae_package_mode or premiere_package_mode) else export_format
         wav_path = None
         ae_lang_entries: List[Dict[str, Any]] = []
-        if ae_package_mode:
+        premiere_lang_entries: List[Dict[str, Any]] = []
+        if ae_package_mode or premiere_package_mode:
             export_video = True
             export_srt = True
-        ae_paths = _create_ae_package_dirs(job_id) if ae_package_mode else {}
-        video_meta = _probe_video_metadata(video_path) if ae_package_mode else {}
-        
+        ae_paths = (
+            _create_ae_package_dirs(job_id) if ae_package_mode
+            else _create_premiere_package_dirs(job_id) if premiere_package_mode
+            else {}
+        )
+        video_meta = _probe_video_metadata(video_path) if (ae_package_mode or premiere_package_mode) else {}
+
         # Nếu có raw_text (1 đoạn dài) và không yêu cầu ngắt theo nhịp điệu (hoặc fallback)
         if raw_text and not subtitle_lines and not auto_segment_rhythm:
             update_job(job_id, progress=10, message="AI is segmenting static text...")
@@ -2080,103 +2364,84 @@ async def process_subtitles_from_text(
                 for i, text in enumerate(subtitle_lines)
             ]
 
-        if ae_package_mode:
-            update_job(job_id, progress=62, message="Preparing AE package audio (WAV)...")
+        if ae_package_mode or premiere_package_mode:
+            pkg_label = "AE" if ae_package_mode else "Premiere"
+            update_job(job_id, progress=62, message=f"Preparing {pkg_label} package audio (WAV)...")
             wav_output = ae_paths["audio"] / f"{Path(video_path).stem}_master.wav"
             wav_path = _export_wav_for_ae(video_path, wav_output)
             result_files.append(ResultFile(
                 path=wav_path,
                 language="multi",
                 type="audio",
-                label="AE Package - Master WAV"
+                label=f"{pkg_label} Package - Master WAV"
             ))
-        
+
         update_job(job_id, progress=70, message="Starting output export...")
-        
+
         # 4. Xử lý từng ngôn ngữ (tương tự như process_subtitles)
         total_langs = len(target_langs)
         renderer = SubtitleRenderer(str(OUTPUT_DIR))
-        
+
         for i, lang in enumerate(target_langs):
             lang_name = LANG_NAMES.get(lang, lang)
             progress = 70 + int((i / total_langs) * 20)
             update_job(job_id, progress=progress, message=f"Rendering output for {lang_name}...")
-            
-            # Dịch hoặc dùng bản dịch thủ công
+
             if lang == source_lang:
-                # Strip index for renderer compatibility
                 aligned = [(s, e, t) for s, e, t, idx in aligned_source]
             elif manual_translations and lang in manual_translations:
                 logger.info(f"Using manual translation for {lang} with index mapping...")
                 m_texts = manual_translations[lang]
-                
-                # Use the original_idx to pick the correct translation from m_texts
                 aligned = []
                 for start, end, _, original_idx in aligned_source:
-                    trans_text = ""
-                    if 0 <= original_idx < len(m_texts):
-                        trans_text = m_texts[original_idx].strip()
+                    trans_text = m_texts[original_idx].strip() if 0 <= original_idx < len(m_texts) else ""
                     aligned.append((start, end, trans_text))
             else:
                 try:
                     logger.info(f"Translating subtitles from {source_lang} to {lang}...")
-                    # translate_subtitles_gpt expects (start, end, text) so strip index
                     source_for_trans = [(s, e, t) for s, e, t, idx in aligned_source]
                     aligned = translate_subtitles_gpt(source_for_trans, source_lang, lang)
                     logger.info(f"Translation to {lang} completed.")
                 except Exception as e:
                     logger.warning(f"Translation to {lang} failed: {e}")
                     continue
-            
-            # Export video với phụ đề
+
             rendered_video_path = None
             if export_video:
                 try:
                     logger.info(f"Rendering video for {lang}...")
-                    
-                    # Chọn đuôi file phù hợp (ProRes cần .mov)
+                    is_pkg = ae_package_mode or premiere_package_mode
                     ext = ".mov" if render_export_format == "prores" else ".mp4"
                     output_filename = f"{Path(video_path).stem}_{lang}{ext}"
                     output_path = (
                         str(ae_paths["video"] / output_filename)
-                        if ae_package_mode else
+                        if is_pkg else
                         str(OUTPUT_DIR / output_filename)
                     )
-                    
                     output_path = renderer.render(
-                        video_path,
-                        aligned,
-                        output_path,
-                        language=lang,
-                        video_format=video_format,
+                        video_path, aligned, output_path,
+                        language=lang, video_format=video_format,
                         export_format=render_export_format
                     )
                     result_files.append(ResultFile(
-                        path=output_path,
-                        language=lang,
-                        type="video",
-                        label=f"{lang_name} - {'ProRes Video' if ae_package_mode else 'Video'}"
+                        path=output_path, language=lang, type="video",
+                        label=f"{lang_name} - {'ProRes Video' if is_pkg else 'Video'}"
                     ))
                     rendered_video_path = output_path
                     logger.info(f"Rendered video for {lang} saved to {output_path}")
                 except Exception as e:
                     logger.warning(f"Render {lang} video failed: {e}")
-            
-            # Export SRT
+
             if export_srt:
                 try:
+                    is_pkg = ae_package_mode or premiere_package_mode
                     srt_path = (
                         str(ae_paths["subtitles"] / f"{Path(video_path).stem}_{lang}.srt")
-                        if ae_package_mode else
+                        if is_pkg else
                         str(OUTPUT_DIR / f"subtitle_{job_id}_{lang}.srt")
                     )
                     generate_srt(aligned, srt_path)
-                    result_files.append(ResultFile(
-                        path=srt_path,
-                        language=lang,
-                        type="srt",
-                        label=f"{lang_name} - SRT"
-                    ))
+                    result_files.append(ResultFile(path=srt_path, language=lang, type="srt", label=f"{lang_name} - SRT"))
                     logger.info(f"Generated SRT for {lang} saved to {srt_path}")
                 except Exception as e:
                     logger.warning(f"Generate {lang} SRT failed: {e}")
@@ -2184,35 +2449,28 @@ async def process_subtitles_from_text(
             if ae_package_mode:
                 timeline_path = _write_timeline_json_for_ae(
                     ae_paths["timeline"] / f"{Path(video_path).stem}_{lang}.json",
-                    aligned,
-                    language=lang,
-                    source_language=source_lang,
-                    video_path=video_path,
-                    metadata=video_meta,
+                    aligned, language=lang, source_language=source_lang,
+                    video_path=video_path, metadata=video_meta,
                 )
-                result_files.append(ResultFile(
-                    path=timeline_path,
-                    language=lang,
-                    type="timeline",
-                    label=f"{lang_name} - Timeline JSON"
-                ))
+                result_files.append(ResultFile(path=timeline_path, language=lang, type="timeline", label=f"{lang_name} - Timeline JSON"))
                 ae_lang_entries.append({
                     "language": lang,
-                    "video_rel_path": (
-                        Path(rendered_video_path).relative_to(ae_paths["root"]).as_posix()
-                        if rendered_video_path else ""
-                    ),
+                    "video_rel_path": Path(rendered_video_path).relative_to(ae_paths["root"]).as_posix() if rendered_video_path else "",
                     "timeline_rel_path": Path(timeline_path).relative_to(ae_paths["root"]).as_posix(),
-                    "segments": [
-                        {
-                            "start": round(float(start), 3),
-                            "end": round(float(end), 3),
-                            "text": text,
-                        }
-                        for start, end, text in aligned
-                    ],
+                    "segments": [{"start": round(float(s), 3), "end": round(float(e), 3), "text": t} for s, e, t in aligned],
                 })
-        
+
+            if premiere_package_mode:
+                video_filename = Path(rendered_video_path).name if rendered_video_path else ""
+                fcpxml_filename = f"sequence_{lang.upper()}.fcpxml"
+                fcpxml_path = _write_fcpxml_for_premiere(
+                    ae_paths["premiere_script"] / fcpxml_filename,
+                    aligned, language=lang,
+                    video_filename=video_filename, metadata=video_meta,
+                )
+                result_files.append(ResultFile(path=fcpxml_path, language=lang, type="timeline", label=f"{lang_name} - Premiere FCPXML"))
+                premiere_lang_entries.append({"language": lang, "fcpxml_filename": fcpxml_filename})
+
         if not result_files:
             raise ValueError("Không tạo được output nào")
 
@@ -2223,27 +2481,31 @@ async def process_subtitles_from_text(
                     jsx_path = _write_ae_jsx_script(
                         package_root=ae_paths["root"],
                         script_dir=ae_paths["ae_script"],
-                        job_id=job_id,
-                        video_meta=video_meta,
+                        job_id=job_id, video_meta=video_meta,
                         audio_rel_path=Path(wav_path).relative_to(ae_paths["root"]).as_posix(),
                         languages=ae_lang_entries,
                     )
-                    result_files.append(ResultFile(
-                        path=jsx_path,
-                        language="multi",
-                        type="script",
-                        label="AE Package - Auto Import Script (.jsx)"
-                    ))
+                    result_files.append(ResultFile(path=jsx_path, language="multi", type="script", label="AE Package - Auto Import Script (.jsx)"))
                 except Exception as e:
                     logger.warning(f"Failed to generate AE JSX script: {e}")
-
             package_zip = _zip_ae_package(ae_paths["root"])
-            result_files.insert(0, ResultFile(
-                path=package_zip,
-                language="multi",
-                type="zip",
-                label="AE Package - ZIP"
-            ))
+            result_files.insert(0, ResultFile(path=package_zip, language="multi", type="zip", label="AE Package - ZIP"))
+            primary_result_path = package_zip
+
+        if premiere_package_mode:
+            if wav_path and premiere_lang_entries:
+                try:
+                    jsx_path = _write_premiere_jsx_script(
+                        script_dir=ae_paths["premiere_script"],
+                        job_id=job_id,
+                        audio_rel_path=Path(wav_path).relative_to(ae_paths["root"]).as_posix(),
+                        fcpxml_filenames=[e["fcpxml_filename"] for e in premiere_lang_entries],
+                    )
+                    result_files.append(ResultFile(path=jsx_path, language="multi", type="script", label="Premiere Package - Auto Import Script (.jsx)"))
+                except Exception as e:
+                    logger.warning(f"Failed to generate Premiere JSX script: {e}")
+            package_zip = _zip_ae_package(ae_paths["root"])
+            result_files.insert(0, ResultFile(path=package_zip, language="multi", type="zip", label="Premiere Package - ZIP"))
             primary_result_path = package_zip
         
         update_job(
