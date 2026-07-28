@@ -245,7 +245,7 @@ html, body {
 }
 
 /* Mode panels */
-.mode-panel { display: none; flex-direction: column; gap: 0.65rem; }
+.mode-panel { display: none; flex-direction: column; gap: 0.9rem; }
 .mode-panel.active { display: flex; }
 
 /* ── STATUS BAR ──────────────────────────────────────────── */
@@ -338,7 +338,7 @@ html, body {
 }
 
 /* ── FORM ELEMENTS ───────────────────────────────────────── */
-.field { display: flex; flex-direction: column; gap: 0.3rem; }
+.field { display: flex; flex-direction: column; gap: 0.4rem; }
 .field label {
     font-size: 0.75rem;
     color: var(--text-muted);

@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
 <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
-<link rel="stylesheet" href="/static/css/main.css?v=6">
+<link rel="stylesheet" href="/static/css/main.css?v=7">
 </head>
 <body>
 
@@ -97,12 +97,7 @@
                     </div>
 
                     <!-- Auto AI mode info -->
-                    <div id="auto-input" class="input-content active">
-                        <div class="info-box">
-                            <i class="ph ph-robot"></i>
-                            <span data-i18n="sub.ai_desc">AI automatically generates subtitles from your video audio via Whisper.</span>
-                        </div>
-                    </div>
+                    <div id="auto-input" class="input-content active"></div>
 
                     <!-- Manual Excel mode -->
                     <div id="text-input" class="input-content">
@@ -282,9 +277,8 @@
                                     <option value="ae_package" data-i18n="sub.fmt.ae">🧩 AE Package (ProRes+WAV+SRT+JSON)</option>
                                     <option value="premiere_package" data-i18n="sub.fmt.premiere">🎬 Premiere Package (ProRes+WAV+SRT+FCPXML)</option>
                                 </select>
-                                <div id="format-info-box" class="info-box" style="margin-top:0.35rem;">
-                                    <i class="ph ph-info"></i>
-                                    <span id="format-info-text">Ideal for web sharing and general review.</span>
+                                <div id="format-info-box" style="display:none;">
+                                    <span id="format-info-text"></span>
                                 </div>
                             </div>
                         </div>
