@@ -1527,20 +1527,13 @@ async function loadFontList() {
     } catch(e) { console.warn('loadFontList:', e); }
 }
 
-async function deleteFont() {
+async function deleteFontConfirmed() {
     const sel = document.getElementById('font-family-select');
     const selectedOpt = sel.options[sel.selectedIndex];
-    if (!selectedOpt || sel.selectedIndex === 0) {
-        showToast('Select an uploaded font to delete first', 'error');
-        return;
-    }
+    document.getElementById('font-delete-confirm')?.remove();
+    if (!selectedOpt) return;
     const fontName = selectedOpt.value;
     const fileName = selectedOpt.dataset.file;
-    if (!fileName) {
-        showToast('Default fonts cannot be deleted', 'error');
-        return;
-    }
-    if (!confirm(`Delete font "${fontName}"?`)) return;
     try {
         const res = await fetch(`/api/fonts/${encodeURIComponent(fileName)}`, { method: 'DELETE' });
         if (!res.ok) throw new Error((await res.json()).detail);
@@ -1551,6 +1544,41 @@ async function deleteFont() {
     } catch(e) {
         showToast('Delete failed: ' + e.message, 'error');
     }
+}
+
+function deleteFont() {
+    const sel = document.getElementById('font-family-select');
+    const selectedOpt = sel.options[sel.selectedIndex];
+    if (!selectedOpt || sel.selectedIndex === 0) {
+        showToast('Select an uploaded font to delete first', 'error');
+        return;
+    }
+    if (!selectedOpt.dataset.file) {
+        showToast('Default fonts cannot be deleted', 'error');
+        return;
+    }
+    // Remove any existing confirm bar
+    document.getElementById('font-delete-confirm')?.remove();
+    const fontName = selectedOpt.value;
+    const bar = document.createElement('div');
+    bar.id = 'font-delete-confirm';
+    bar.style.cssText = `
+        display:flex;align-items:center;gap:0.5rem;
+        background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);
+        border-radius:8px;padding:0.4rem 0.65rem;font-size:0.76rem;
+        animation:toastIn 0.18s ease;
+    `;
+    bar.innerHTML = `
+        <i class="ph ph-warning" style="color:var(--error);flex-shrink:0;"></i>
+        <span style="flex:1;color:var(--text);">Delete <strong>"${fontName}"</strong>?</span>
+        <button onclick="deleteFontConfirmed()" style="background:var(--error);color:#fff;border:none;border-radius:6px;padding:0.28rem 0.65rem;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:inherit;">Delete</button>
+        <button onclick="document.getElementById('font-delete-confirm')?.remove()" style="background:var(--panel-light);color:var(--text-muted);border:1px solid var(--border);border-radius:6px;padding:0.28rem 0.55rem;font-size:0.74rem;font-weight:600;cursor:pointer;font-family:inherit;">Cancel</button>
+    `;
+    // Insert right after the font field
+    const fontField = sel.closest('.field');
+    fontField.insertAdjacentElement('afterend', bar);
+    // Auto-dismiss after 6s
+    setTimeout(() => document.getElementById('font-delete-confirm')?.remove(), 6000);
 }
 
 async function uploadFont(input) {
