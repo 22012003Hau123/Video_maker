@@ -32,6 +32,21 @@
     --ease-spring:  cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+html[data-theme="light"] {
+    --navbar-bg-rgb: 244,244,248;
+    --bg:           #f4f4f8;
+    --surface:      #ffffff;
+    --panel:        #eeeef5;
+    --panel-light:  #e6e6f0;
+    --border:       #d8d8e6;
+    --border-hi:    #c4c4d8;
+    --primary-dim:  rgba(75,124,249,0.10);
+    --primary-glow: rgba(75,124,249,0.20);
+    --text:         #0d0d14;
+    --text-muted:   #5a5a72;
+    --text-dim:     #a0a0b8;
+}
+
 html, body {
     height: 100%;
     overflow: hidden;
@@ -52,7 +67,7 @@ html, body {
 /* ── NAVBAR ──────────────────────────────────────────────── */
 .navbar {
     height: var(--navbar-h);
-    background: rgba(17, 17, 24, 0.82);
+    background: rgba(var(--navbar-bg-rgb, 17,17,24), 0.82);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     border-bottom: 1px solid var(--border);

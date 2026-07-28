@@ -226,6 +226,22 @@ function toggleLang() {
     setLang(currentLang === 'en' ? 'fr' : 'en');
 }
 
+// ── THEME ─────────────────────────────────────────────────────
+function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    const icon = document.getElementById('theme-icon');
+    if (icon) {
+        icon.className = theme === 'light' ? 'ph ph-moon' : 'ph ph-sun';
+    }
+    localStorage.setItem('theme', theme);
+}
+function toggleTheme() {
+    applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
+}
+(function () {
+    applyTheme(localStorage.getItem('theme') || 'dark');
+})();
+
 // ── MODE SWITCHING ────────────────────────────────────────────
 const MODE_LABELS = {
     subtitle: 'Subtitle Pipeline',
