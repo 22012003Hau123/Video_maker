@@ -1887,6 +1887,7 @@ async function pollJobStatus(jobId, statusBoxId) {
                 if (goldPlanBtn)   goldPlanBtn.disabled   = false;
                 document.querySelectorAll('button[type="submit"]').forEach(b => b.disabled = false);
                 updateStatusbar(100, (PIPELINE_LABELS[statusBoxId] || 'Pipeline') + ' — Completed');
+                setTimeout(() => updateStatusbar(0, 'Ready'), 3000);
 
             } else if (job.status === 'failed') {
                 const goldRenderBtn = document.getElementById('gold-render-btn');
