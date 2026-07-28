@@ -731,9 +731,36 @@ function setupExcelDropZone(containerId, inputId) {
 }
 
 // ── FORM SUBMISSIONS ──────────────────────────────────────────
+let _subtitleDone = false;
+let _subtitleConfirmTimer = null;
+
+function _resetSubtitleBtn() {
+    const btn = document.getElementById('subtitle-submit');
+    if (!btn) return;
+    btn.dataset.confirm = '';
+    btn.style.background = '';
+    btn.innerHTML = '<i class="ph ph-rocket-launch"></i> <span data-i18n="sub.generate">Generate Subtitles</span>';
+    if (_subtitleConfirmTimer) { clearTimeout(_subtitleConfirmTimer); _subtitleConfirmTimer = null; }
+}
+
 async function submitSubtitle(e) {
     e.preventDefault();
     const form = e.target;
+
+    // Confirmation guard — only after a job has completed
+    if (_subtitleDone) {
+        const btn = document.getElementById('subtitle-submit');
+        if (btn.dataset.confirm !== '1') {
+            btn.dataset.confirm = '1';
+            btn.style.background = 'linear-gradient(135deg, #f59e0b, #ef4444)';
+            btn.innerHTML = '<i class="ph ph-warning"></i> Confirm? Click again to re-run';
+            _subtitleConfirmTimer = setTimeout(_resetSubtitleBtn, 4000);
+            return;
+        }
+        _resetSubtitleBtn();
+    }
+    _subtitleDone = false;
+
     const formData = new FormData(form);
 
     const videoInput = form.querySelector('input[name="video"]');
@@ -1806,6 +1833,7 @@ async function pollJobStatus(jobId, statusBoxId) {
                     const cbEl = document.getElementById('sub-preview-enabled');
                     if (cbEl) cbEl.checked = false;
                     toggleSubPreview(false);
+                    _subtitleDone = true;
                 }
 
                 const downloadUrl = `/api/download/${jobId}?t=${Date.now()}`;
