@@ -59,9 +59,6 @@ logs/
 .DS_Store
 Thumbs.db
 
-# Fonts (mounted via Docker volume, not tracked in git)
-data/fonts/
-
 # Mastering Assets (Large binaries)
 src/mastering/closing/
 src/mastering/full_video/
