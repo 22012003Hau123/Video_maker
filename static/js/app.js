@@ -1779,8 +1779,6 @@ async function pollJobStatus(jobId, statusBoxId) {
                 stepHtml = `<div class="status-compact-step"><i class="ph ph-gear ph-spin"></i> ${msg}</div>`;
             }
 
-            // Update bottom statusbar
-            updateStatusbar(progress, (PIPELINE_LABELS[statusBoxId] || 'Processing') + ' — ' + msg);
 
             let html = `
                 <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:0.6rem;">
