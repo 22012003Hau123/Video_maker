@@ -1520,10 +1520,37 @@ async function loadFontList() {
                 const opt = document.createElement('option');
                 opt.value = f.name;
                 opt.textContent = f.name;
+                opt.dataset.file = f.file; // used by deleteFont()
                 sel.appendChild(opt);
             }
         });
     } catch(e) { console.warn('loadFontList:', e); }
+}
+
+async function deleteFont() {
+    const sel = document.getElementById('font-family-select');
+    const selectedOpt = sel.options[sel.selectedIndex];
+    if (!selectedOpt || sel.selectedIndex === 0) {
+        showToast('Select an uploaded font to delete first', 'error');
+        return;
+    }
+    const fontName = selectedOpt.value;
+    const fileName = selectedOpt.dataset.file;
+    if (!fileName) {
+        showToast('Default fonts cannot be deleted', 'error');
+        return;
+    }
+    if (!confirm(`Delete font "${fontName}"?`)) return;
+    try {
+        const res = await fetch(`/api/fonts/${encodeURIComponent(fileName)}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error((await res.json()).detail);
+        selectedOpt.remove();
+        sel.selectedIndex = 0;
+        updateSubPreview();
+        showToast(`Font "${fontName}" deleted`, 'success');
+    } catch(e) {
+        showToast('Delete failed: ' + e.message, 'error');
+    }
 }
 
 async function uploadFont(input) {
@@ -1543,6 +1570,7 @@ async function uploadFont(input) {
             opt = document.createElement('option');
             opt.value = data.name;
             opt.textContent = data.name;
+            opt.dataset.file = data.file;
             sel.appendChild(opt);
         }
         sel.value = data.name;

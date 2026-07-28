@@ -3540,6 +3540,20 @@ async def upload_font(file: UploadFile = File(...)):
     return {"name": dest.stem, "file": dest.name, "size": len(content)}
 
 
+@app.delete("/api/fonts/{filename}")
+async def delete_font(filename: str):
+    """Xóa font file khỏi data/fonts/"""
+    fonts_dir = Path(__file__).parent / "data" / "fonts"
+    # Only allow .ttf and .otf to prevent path traversal
+    if Path(filename).suffix.lower() not in ('.ttf', '.otf'):
+        raise HTTPException(status_code=400, detail="Invalid file type")
+    dest = fonts_dir / Path(filename).name  # .name strips any directory component
+    if not dest.exists():
+        raise HTTPException(status_code=404, detail="Font not found")
+    dest.unlink()
+    return {"deleted": filename}
+
+
 # ============ Run ============
 
 if __name__ == "__main__":
