@@ -21,7 +21,7 @@
     --text-muted:   #6b6b82;
     --text-dim:     #36364a;
     --sidebar-w:    60px;
-    --controls-w:   clamp(380px, 30vw, 520px);
+    --controls-w:   clamp(440px, 38vw, 620px);
     --navbar-h:     48px;
     --statusbar-h:  46px;
     --radius:       10px;
