@@ -247,6 +247,7 @@ html, body {
 /* Mode panels */
 .mode-panel { display: none; flex-direction: column; gap: 1.1rem; }
 .mode-panel.active { display: flex; }
+.mode-panel form { display: flex; flex-direction: column; gap: 0.85rem; }
 
 /* ── STATUS BAR ──────────────────────────────────────────── */
 .statusbar {
@@ -497,6 +498,8 @@ input[type="checkbox"]:hover { border-color: var(--primary); }
 .lang-chip:hover { border-color: var(--border-hi); color: var(--text); background: rgba(255,255,255,0.04); }
 
 /* ── COLLAPSIBLE ─────────────────────────────────────────── */
+.input-content:empty { display: none; }
+
 .collapse-header {
     display: flex;
     align-items: center;
