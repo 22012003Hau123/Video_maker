@@ -35,8 +35,8 @@ services:
       # Persist uploads and outputs
       - uploads_data:/app/uploads
       - outputs_data:/app/outputs
-      # Custom fonts (optional)
-      - ./data/fonts:/app/data/fonts:ro
+      # Custom fonts (writable so font upload works)
+      - ./data/fonts:/app/data/fonts
       # Legal templates (optional, for live updates)
       - ./data/legal_templates:/app/data/legal_templates:ro
       # Gold POS Mastering Assets (Mounted from host because they are ignored in Git/Docker)
@@ -78,7 +78,7 @@ services:
     volumes:
       - uploads_data:/app/uploads
       - outputs_data:/app/outputs
-      - ./data/fonts:/app/data/fonts:ro
+      - ./data/fonts:/app/data/fonts
       - ./data/legal_templates:/app/data/legal_templates:ro
       # Gold POS Mastering Assets (Mounted from host)
       - ./src/mastering/opening:/app/src/mastering/opening:ro
