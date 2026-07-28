@@ -232,10 +232,10 @@ html, body {
 .controls-scroll {
     flex: 1;
     overflow-y: auto;
-    padding: 1rem;
+    padding: 1.1rem;
     display: flex;
     flex-direction: column;
-    gap: 0.65rem;
+    gap: 1rem;
 }
 .controls-footer {
     padding: 0.75rem 1rem;
@@ -245,7 +245,7 @@ html, body {
 }
 
 /* Mode panels */
-.mode-panel { display: none; flex-direction: column; gap: 0.9rem; }
+.mode-panel { display: none; flex-direction: column; gap: 1.1rem; }
 .mode-panel.active { display: flex; }
 
 /* ── STATUS BAR ──────────────────────────────────────────── */
@@ -333,12 +333,15 @@ html, body {
     font-weight: 700;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: var(--text-dim);
-    padding-bottom: 0.4rem;
+    color: var(--text-muted);
+    padding: 0.75rem 0 0.4rem;
+    border-top: 1px solid var(--border);
+    margin-top: 0.25rem;
 }
+.section-label:first-child { border-top: none; padding-top: 0; margin-top: 0; }
 
 /* ── FORM ELEMENTS ───────────────────────────────────────── */
-.field { display: flex; flex-direction: column; gap: 0.4rem; }
+.field { display: flex; flex-direction: column; gap: 0.5rem; }
 .field label {
     font-size: 0.75rem;
     color: var(--text-muted);
