@@ -18,8 +18,8 @@
     --warning:      #f59e0b;
     --error:        #ef4444;
     --text:         #ebebf2;
-    --text-muted:   #6b6b82;
-    --text-dim:     #36364a;
+    --text-muted:   #9898b2;
+    --text-dim:     #5c5c78;
     --sidebar-w:    72px;
     --controls-w:   clamp(440px, 38vw, 620px);
     --navbar-h:     48px;
@@ -43,8 +43,8 @@ html[data-theme="light"] {
     --primary-dim:  rgba(75,124,249,0.10);
     --primary-glow: rgba(75,124,249,0.20);
     --text:         #0d0d14;
-    --text-muted:   #5a5a72;
-    --text-dim:     #a0a0b8;
+    --text-muted:   #4a4a62;
+    --text-dim:     #8888a0;
 }
 
 html, body {
@@ -330,9 +330,9 @@ html, body {
 
 /* ── SECTION LABEL ───────────────────────────────────────── */
 .section-label {
-    font-size: 0.67rem;
+    font-size: 0.7rem;
     font-weight: 700;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-muted);
     padding: 0.75rem 0 0.4rem;
@@ -344,9 +344,9 @@ html, body {
 /* ── FORM ELEMENTS ───────────────────────────────────────── */
 .field { display: flex; flex-direction: column; gap: 0.5rem; }
 .field label {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    font-weight: 600;
+    font-size: 0.78rem;
+    color: var(--text);
+    font-weight: 500;
     letter-spacing: 0.01em;
 }
 
