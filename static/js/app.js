@@ -38,6 +38,20 @@ const I18N = {
         'sub.info.highbitrate':'High bitrate for broadcast or archive use.',
         'sub.info.ae':         'Full asset bundle for After Effects workflow.',
         'sub.info.premiere':   'Full asset bundle for Adobe Premiere Pro — run the .jsx script to auto-import.',
+        'sub.text_color':      'Text Color',
+        'sub.border':          'Border',
+        'sub.border_size':     'Thickness',
+        'sub.shadow':          'Drop Shadow',
+        'sub.shadow_opacity':  'Opacity',
+        'sub.shadow_size':     'Size',
+        'sub.shadow_dir.br':   '↘ Bottom Right',
+        'sub.shadow_dir.b':    '↓ Bottom',
+        'sub.shadow_dir.bl':   '↙ Bottom Left',
+        'sub.shadow_dir.r':    '→ Right',
+        'sub.shadow_dir.l':    '← Left',
+        'sub.shadow_dir.tr':   '↗ Top Right',
+        'sub.shadow_dir.t':    '↑ Top',
+        'sub.shadow_dir.tl':   '↖ Top Left',
         'sub.font_default':    'Default (Helvetica)',
         'sub.generate':        'Generate Subtitles',
         'legal.options':       'Legal Options',
@@ -118,6 +132,20 @@ const I18N = {
         'sub.info.highbitrate':'Débit élevé pour la diffusion ou l\'archivage.',
         'sub.info.ae':         'Bundle complet pour le workflow After Effects.',
         'sub.info.premiere':   'Bundle complet pour Adobe Premiere Pro — lancez le script .jsx pour importer automatiquement.',
+        'sub.text_color':      'Couleur du texte',
+        'sub.border':          'Contour',
+        'sub.border_size':     'Épaisseur',
+        'sub.shadow':          'Ombre portée',
+        'sub.shadow_opacity':  'Opacité',
+        'sub.shadow_size':     'Taille',
+        'sub.shadow_dir.br':   '↘ Bas droite',
+        'sub.shadow_dir.b':    '↓ Bas',
+        'sub.shadow_dir.bl':   '↙ Bas gauche',
+        'sub.shadow_dir.r':    '→ Droite',
+        'sub.shadow_dir.l':    '← Gauche',
+        'sub.shadow_dir.tr':   '↗ Haut droite',
+        'sub.shadow_dir.t':    '↑ Haut',
+        'sub.shadow_dir.tl':   '↖ Haut gauche',
         'sub.font_default':    'Défaut (Helvetica)',
         'sub.generate':        'Générer les sous-titres',
         'legal.options':       'Options Légales',
@@ -1342,6 +1370,7 @@ function updateSubPreview() {
     if (!document.getElementById('sub-preview-enabled')?.checked) return;
 
     const player     = document.getElementById('main-preview-player');
+    if (!player) return;
     const format     = document.getElementById('sub-video-format')?.value || '16x9';
     const fontFamily = document.getElementById('font-family-select')?.value || 'Helvetica';
     const fontSize   = parseInt(document.getElementById('sub-font-size')?.value  || '48');
@@ -1387,12 +1416,41 @@ function updateSubPreview() {
     const isBlack   = fn.includes('black');
     const isBold    = isBlack || fn.includes('bold') || fn.includes('rounded');
 
+    // Text color
+    const textColor = document.getElementById('sub-text-color')?.value || '#FFFFFF';
+
+    // Border
+    const borderEnabled = document.getElementById('sub-border-enabled')?.checked;
+    const borderColor   = document.getElementById('sub-border-color')?.value || '#000000';
+    const borderSizePx  = parseInt(document.getElementById('sub-border-size')?.value || '2');
+
+    // Shadow
+    const shadowEnabled   = document.getElementById('sub-shadow-enabled')?.checked;
+    const shadowOpacityPct = parseInt(document.getElementById('sub-shadow-opacity')?.value || '80');
+    const shadowSizePx    = parseInt(document.getElementById('sub-shadow-size')?.value || '3');
+    const shadowColor     = document.getElementById('sub-shadow-color')?.value || '#000000';
+    const shadowDir       = document.getElementById('sub-shadow-direction')?.value || 'bottom_right';
+
+    const SHADOW_OFFSETS = {
+        bottom_right: [ 1,  1], bottom:  [ 0,  1], bottom_left: [-1,  1],
+        right:        [ 1,  0], left:    [-1,  0],
+        top_right:    [ 1, -1], top:     [ 0, -1], top_left:    [-1, -1],
+    };
+    const [sdx, sdy] = SHADOW_OFFSETS[shadowDir] || [1, 1];
+    const shadowAlpha = shadowOpacityPct / 100;
+
     textEl.style.fontFamily = fontFamily ? `"${fontFamily}", Helvetica, Arial, sans-serif`
                                          : 'Helvetica, Arial, sans-serif';
     textEl.style.fontStyle  = isOblique ? 'oblique' : 'normal';
     textEl.style.fontWeight = isBlack ? '900' : isBold ? 'bold' : 'normal';
     textEl.style.fontSize   = scaledSize + 'px';
-    textEl.style.textShadow = `0 ${Math.round(2*scale)}px ${Math.round(12*scale)}px rgba(0,0,0,0.55)`;
+    textEl.style.color      = textColor;
+    textEl.style.webkitTextStroke = borderEnabled
+        ? `${Math.round(borderSizePx * scale)}px ${borderColor}`
+        : '0px transparent';
+    textEl.style.textShadow = shadowEnabled
+        ? `${Math.round(sdx * shadowSizePx * scale)}px ${Math.round(sdy * shadowSizePx * scale)}px ${Math.round(4*scale)}px rgba(${parseInt(shadowColor.slice(1,3),16)},${parseInt(shadowColor.slice(3,5),16)},${parseInt(shadowColor.slice(5,7),16)},${shadowAlpha})`
+        : 'none';
 
     // Position overlay to exactly cover the rendered video content
     overlay.style.left    = contentLeft + 'px';
@@ -1400,6 +1458,24 @@ function updateSubPreview() {
     overlay.style.width   = contentW + 'px';
     overlay.style.bottom  = (contentBottom + scaledMargin) + 'px';
     overlay.style.display = 'block';
+}
+
+function toggleBorderSettings(on) {
+    const section = document.getElementById('border-settings');
+    if (section) section.style.display = on ? 'block' : 'none';
+    ['sub-border-color', 'sub-border-size'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = !on;
+    });
+}
+
+function toggleShadowSettings(on) {
+    const section = document.getElementById('shadow-settings');
+    if (section) section.style.display = on ? 'block' : 'none';
+    ['sub-shadow-opacity', 'sub-shadow-size', 'sub-shadow-color', 'sub-shadow-direction'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = !on;
+    });
 }
 
 function toggleSubPreview(on) {

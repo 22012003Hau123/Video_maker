@@ -15,6 +15,28 @@ from .font_manager import get_font_manager, FontConfig
 logger = logging.getLogger(__name__)
 
 
+_SHADOW_DIRS = {
+    "bottom_right": ( 1,  1),
+    "bottom":       ( 0,  1),
+    "bottom_left":  (-1,  1),
+    "right":        ( 1,  0),
+    "left":         (-1,  0),
+    "top_right":    ( 1, -1),
+    "top":          ( 0, -1),
+    "top_left":     (-1, -1),
+}
+
+
+def _hex_to_ass(hex_color: str, opacity_pct: int = 100) -> str:
+    """Convert #RRGGBB + opacity% (100=opaque, 0=transparent) to ASS &HAABBGGRR"""
+    h = (hex_color or '#000000').lstrip('#')
+    if len(h) != 6:
+        h = 'FFFFFF'
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    a = int((1 - max(0, min(100, opacity_pct)) / 100) * 255)
+    return f"&H{a:02X}{b:02X}{g:02X}{r:02X}"
+
+
 @dataclass
 class VideoFormat:
     """Thông tin định dạng video"""
@@ -89,6 +111,13 @@ class SubtitleRenderer:
         font_family: Optional[str] = None,
         font_size: Optional[int] = None,
         margin_v: Optional[int] = None,
+        font_color: str = "#FFFFFF",
+        border_color: str = "#000000",
+        border_size: Optional[int] = None,
+        shadow_color: str = "#000000",
+        shadow_opacity: int = 80,
+        shadow_size: int = 0,
+        shadow_direction: str = "bottom_right",
     ) -> str:
         """
         Tạo file ASS (Advanced SubStation Alpha) với styling
@@ -134,6 +163,23 @@ class SubtitleRenderer:
             if "oblique" in fn_lower or "italic" in fn_lower:
                 opts["italic"] = 1
         
+        # Resolve dynamic style values from user params
+        primary_color = _hex_to_ass(font_color)
+        outline_col = _hex_to_ass(border_color) if border_size is not None else outline_color
+        outline_val = border_size if border_size is not None else opts['outline']
+        if shadow_size > 0:
+            back_col = _hex_to_ass(shadow_color, shadow_opacity)
+            shadow_val = shadow_size
+        else:
+            back_col = opts['backcolor']
+            shadow_val = opts['shadow']
+
+        # Pre-compute shadow direction override tag for dialogue lines
+        shade_tag = ""
+        if shadow_size > 0:
+            sx, sy = _SHADOW_DIRS.get(shadow_direction, (1, 1))
+            shade_tag = "{\\xshad" + str(round(sx * shadow_size)) + "\\yshad" + str(round(sy * shadow_size)) + "}"
+
         # ASS header với style
         ass_content = f"""[Script Info]
 Title: Auto Generated Subtitles
@@ -143,16 +189,16 @@ PlayResY: {video_format.height}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Blur, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{opts['fontname']},{opts['fontsize']},&H00FFFFFF,&H000000FF,{outline_color},{opts['backcolor']},{opts['bold']},{opts['italic']},0,0,{opts['scalex']},{opts['scaley']},0,0,{border_style},{opts['outline']},{opts['shadow']},{opts['blur']},{alignment},{margin_l},{margin_r},{margin_v},1
+Style: Default,{opts['fontname']},{opts['fontsize']},{primary_color},&H000000FF,{outline_col},{back_col},{opts['bold']},{opts['italic']},0,0,{opts['scalex']},{opts['scaley']},0,0,{border_style},{outline_val},{shadow_val},{opts['blur']},{alignment},{margin_l},{margin_r},{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
-        
+
         for start, end, text in subtitles:
             # Escape các ký tự đặc biệt và xử lý xuống dòng
             text = text.replace("\\n", "\\N").replace("\n", "\\N")
-            ass_content += f"Dialogue: 0,{format_time_ass(start)},{format_time_ass(end)},Default,,0,0,0,,{text}\n"
+            ass_content += f"Dialogue: 0,{format_time_ass(start)},{format_time_ass(end)},Default,,0,0,0,,{shade_tag}{text}\n"
         
         Path(output_path).write_text(ass_content, encoding='utf-8')
         return output_path
@@ -223,6 +269,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         font_family: Optional[str] = None,
         font_size: Optional[int] = None,
         margin_v: Optional[int] = None,
+        font_color: str = "#FFFFFF",
+        border_color: str = "#000000",
+        border_size: Optional[int] = None,
+        shadow_color: str = "#000000",
+        shadow_opacity: int = 80,
+        shadow_size: int = 0,
+        shadow_direction: str = "bottom_right",
     ) -> str:
         """
         Render phụ đề lên video
@@ -261,7 +314,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             dir=str(self.output_dir)
         ) as tmp_file:
             if use_ass:
-                self.create_ass_file(subtitles, tmp_file.name, font_config, vf, font_family=font_family, font_size=font_size, margin_v=margin_v)
+                self.create_ass_file(
+                    subtitles, tmp_file.name, font_config, vf,
+                    font_family=font_family, font_size=font_size, margin_v=margin_v,
+                    font_color=font_color, border_color=border_color, border_size=border_size,
+                    shadow_color=shadow_color, shadow_opacity=shadow_opacity,
+                    shadow_size=shadow_size, shadow_direction=shadow_direction,
+                )
             else:
                 self.create_srt_file(subtitles, tmp_file.name)
             subtitle_file = tmp_file.name

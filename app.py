@@ -1071,6 +1071,13 @@ async def process_subtitles(
     font_family: Optional[str] = None,
     font_size: Optional[int] = None,
     margin_v: Optional[int] = None,
+    font_color: str = "#FFFFFF",
+    border_color: str = "#000000",
+    border_size: Optional[int] = None,
+    shadow_color: str = "#000000",
+    shadow_opacity: int = 80,
+    shadow_size: int = 0,
+    shadow_direction: str = "bottom_right",
 ):
     """Background task để xử lý phụ đề đa ngôn ngữ"""
     try:
@@ -1106,7 +1113,7 @@ async def process_subtitles(
         transcript, source_lang, _ = sync.transcribe(audio_path, source_lang, prompt=WHISPER_PROMPT)
         
         if not transcript:
-            raise ValueError("Không nhận diện được lời thoại trong video")
+            raise ValueError("No speech detected in the video. Please check that the video has audible dialogue.")
         
         # 3. Tạo aligned subtitles từ transcript
         aligned_source = [
@@ -1171,6 +1178,13 @@ async def process_subtitles(
                         font_family=font_family,
                         font_size=font_size,
                         margin_v=margin_v,
+                        font_color=font_color,
+                        border_color=border_color,
+                        border_size=border_size,
+                        shadow_color=shadow_color,
+                        shadow_opacity=shadow_opacity,
+                        shadow_size=shadow_size,
+                        shadow_direction=shadow_direction,
                     )
                     pkg_label = "AE" if ae_package_mode else "Premiere" if premiere_package_mode else ""
                     result_files.append(ResultFile(
@@ -1246,7 +1260,7 @@ async def process_subtitles(
                 premiere_lang_entries.append({"language": lang, "fcpxml_filename": fcpxml_filename})
 
         if not result_files:
-            raise ValueError("Không tạo được output nào")
+            raise ValueError("No output files were generated.")
 
         primary_result_path = result_files[0].path
         if ae_package_mode:
@@ -2232,7 +2246,14 @@ async def add_subtitle(
     export_format: str = Form("mp4_standard"),
     font_family: str = Form(""),
     font_size: Optional[int] = Form(None),
-    margin_v: Optional[int] = Form(None)
+    margin_v: Optional[int] = Form(None),
+    font_color: str = Form("#FFFFFF"),
+    border_color: str = Form("#000000"),
+    border_size: Optional[int] = Form(None),
+    shadow_color: str = Form("#000000"),
+    shadow_opacity: int = Form(80),
+    shadow_size: int = Form(0),
+    shadow_direction: str = Form("bottom_right"),
 ):
     """
     Thêm phụ đề đa ngôn ngữ vào video bằng AI
@@ -2264,6 +2285,13 @@ async def add_subtitle(
         font_family or None,
         font_size,
         margin_v,
+        font_color,
+        border_color,
+        border_size,
+        shadow_color,
+        shadow_opacity,
+        shadow_size,
+        shadow_direction,
     )
     
     lang_names = [LANG_NAMES.get(l, l) for l in langs]
@@ -2282,7 +2310,14 @@ async def process_subtitles_from_text(
     export_format: str = "mp4_standard",
     raw_text: Optional[str] = None,
     auto_segment_rhythm: bool = True,
-    manual_translations: Optional[Dict[str, List[str]]] = None
+    manual_translations: Optional[Dict[str, List[str]]] = None,
+    font_color: str = "#FFFFFF",
+    border_color: str = "#000000",
+    border_size: Optional[int] = None,
+    shadow_color: str = "#000000",
+    shadow_opacity: int = 80,
+    shadow_size: int = 0,
+    shadow_direction: str = "bottom_right",
 ):
     """Background task để xử lý phụ đề từ text trực tiếp (đa ngôn ngữ)"""
     try:
@@ -2326,7 +2361,7 @@ async def process_subtitles_from_text(
             logger.info(f"AI created {len(subtitle_lines)} subtitle segments (static)")
         
         if not subtitle_lines:
-            raise ValueError("Không có phụ đề nào được tạo")
+            raise ValueError("No subtitles were generated.")
         
         update_job(job_id, progress=20)
         
@@ -2420,7 +2455,14 @@ async def process_subtitles_from_text(
                     output_path = renderer.render(
                         video_path, aligned, output_path,
                         language=lang, video_format=video_format,
-                        export_format=render_export_format
+                        export_format=render_export_format,
+                        font_color=font_color,
+                        border_color=border_color,
+                        border_size=border_size,
+                        shadow_color=shadow_color,
+                        shadow_opacity=shadow_opacity,
+                        shadow_size=shadow_size,
+                        shadow_direction=shadow_direction,
                     )
                     result_files.append(ResultFile(
                         path=output_path, language=lang, type="video",
@@ -2471,7 +2513,7 @@ async def process_subtitles_from_text(
                 premiere_lang_entries.append({"language": lang, "fcpxml_filename": fcpxml_filename})
 
         if not result_files:
-            raise ValueError("Không tạo được output nào")
+            raise ValueError("No output files were generated.")
 
         primary_result_path = result_files[0].path
         if ae_package_mode:
@@ -2561,7 +2603,14 @@ async def add_subtitle_from_text(
     export_format: str = Form("mp4_standard"),
     auto_segment: bool = Form(True),
     auto_segment_rhythm: bool = Form(True),
-    manual_translations_json: Optional[str] = Form(None)
+    manual_translations_json: Optional[str] = Form(None),
+    font_color: str = Form("#FFFFFF"),
+    border_color: str = Form("#000000"),
+    border_size: Optional[int] = Form(None),
+    shadow_color: str = Form("#000000"),
+    shadow_opacity: int = Form(80),
+    shadow_size: int = Form(0),
+    shadow_direction: str = Form("bottom_right"),
 ):
     """
     Thêm phụ đề vào video từ text nhập trực tiếp (đa ngôn ngữ)
@@ -2585,7 +2634,7 @@ async def add_subtitle_from_text(
     text = subtitle_text.strip()
     
     if not text and not manual_trans:
-        raise HTTPException(status_code=400, detail="Không có phụ đề nào được nhập hoặc upload")
+        raise HTTPException(status_code=400, detail="No subtitle text provided. Please enter or upload subtitles.")
     
     # Parse target languages
     langs = [l.strip() for l in target_languages.split(",") if l.strip()]
@@ -2625,6 +2674,13 @@ async def add_subtitle_from_text(
         raw_text,
         auto_segment_rhythm,
         manual_trans,
+        font_color,
+        border_color,
+        border_size,
+        shadow_color,
+        shadow_opacity,
+        shadow_size,
+        shadow_direction,
     )
     
     lang_names = [LANG_NAMES.get(l, l) for l in langs]
@@ -3083,7 +3139,7 @@ async def add_subtitle_batch(
     # Parse subtitle text
     text = subtitle_text.strip()
     if not text:
-        raise HTTPException(status_code=400, detail="Không có phụ đề nào được nhập")
+        raise HTTPException(status_code=400, detail="No subtitle text provided.")
     
     lines = [l.strip() for l in text.split('\n') if l.strip()]
     
@@ -3132,7 +3188,7 @@ async def export_subtitle_files(
     """
     text = subtitle_text.strip()
     if not text:
-        raise HTTPException(status_code=400, detail="Không có phụ đề nào được nhập")
+        raise HTTPException(status_code=400, detail="No subtitle text provided.")
     
     lines = [l.strip() for l in text.split('\n') if l.strip()]
     

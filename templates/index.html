@@ -4,9 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Video Subtitles Automation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
 <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
-<link rel="stylesheet" href="/static/css/main.css">
+<link rel="stylesheet" href="/static/css/main.css?v=2">
 </head>
 <body>
 
@@ -53,7 +56,7 @@
             </div>
             <!-- Live subtitle preview overlay -->
             <div id="sub-preview-overlay" style="display:none; position:absolute; left:0; right:0; bottom:0; text-align:center; pointer-events:none; padding:0 4%;">
-                <span id="sub-preview-text" style="display:inline-block; color:#fff; font-family:Helvetica,Arial,sans-serif; font-size:20px; line-height:1.3; text-shadow:0 2px 12px rgba(0,0,0,0.5); white-space:pre-line;">Subtitle preview text</span>
+                <span id="sub-preview-text" style="display:inline-block; color:#fff; font-family:Helvetica,Arial,sans-serif; font-size:20px; line-height:1.3; white-space:pre-line;">Subtitle preview text</span>
             </div>
         </div>
     </main>
@@ -191,6 +194,75 @@
                                 <div class="field">
                                     <label><span data-i18n="sub.position">Position</span> <span id="margin-v-val" style="color:var(--primary);font-weight:700;">30</span>px</label>
                                     <input type="range" id="sub-margin-v" name="margin_v" min="0" max="300" value="30" step="5" oninput="document.getElementById('margin-v-val').textContent=this.value; updateSubPreview();">
+                                </div>
+                            </div>
+
+                            <!-- Text Color -->
+                            <div class="field">
+                                <label data-i18n="sub.text_color">Text Color</label>
+                                <div style="display:flex;gap:0.6rem;align-items:center;">
+                                    <input type="color" id="sub-text-color" name="font_color" value="#FFFFFF"
+                                           oninput="document.getElementById('text-color-val').textContent=this.value.toUpperCase(); updateSubPreview();"
+                                           onchange="document.getElementById('text-color-val').textContent=this.value.toUpperCase(); updateSubPreview();"
+                                           style="width:3rem;height:2.2rem;padding:2px;border-radius:6px;border:1px solid var(--border);cursor:pointer;">
+                                    <span id="text-color-val" style="font-family:monospace;font-size:0.85rem;color:var(--text-muted);">#FFFFFF</span>
+                                </div>
+                            </div>
+
+                            <!-- Border -->
+                            <div class="field">
+                                <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.35rem;">
+                                    <input type="checkbox" id="sub-border-enabled" onchange="toggleBorderSettings(this.checked); updateSubPreview();">
+                                    <label for="sub-border-enabled" style="margin:0;cursor:pointer;" data-i18n="sub.border">Border</label>
+                                </div>
+                                <div id="border-settings" style="display:none;">
+                                    <div style="display:grid;grid-template-columns:auto 1fr;gap:0.5rem;align-items:center;">
+                                        <input type="color" id="sub-border-color" name="border_color" value="#000000"
+                                               disabled oninput="updateSubPreview();" onchange="updateSubPreview();"
+                                               style="width:2.8rem;height:2.2rem;padding:2px;border-radius:6px;border:1px solid var(--border);cursor:pointer;">
+                                        <div>
+                                            <label><span data-i18n="sub.border_size">Thickness</span> <span id="border-size-val" style="color:var(--primary);font-weight:700;">2</span>px</label>
+                                            <input type="range" id="sub-border-size" name="border_size" min="1" max="12" value="2" step="1"
+                                                   disabled oninput="document.getElementById('border-size-val').textContent=this.value; updateSubPreview();">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Drop Shadow -->
+                            <div class="field">
+                                <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.35rem;">
+                                    <input type="checkbox" id="sub-shadow-enabled" onchange="toggleShadowSettings(this.checked); updateSubPreview();">
+                                    <label for="sub-shadow-enabled" style="margin:0;cursor:pointer;" data-i18n="sub.shadow">Drop Shadow</label>
+                                </div>
+                                <div id="shadow-settings" style="display:none;">
+                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
+                                        <div>
+                                            <label><span data-i18n="sub.shadow_opacity">Opacity</span> <span id="shadow-opacity-val" style="color:var(--primary);font-weight:700;">80</span>%</label>
+                                            <input type="range" id="sub-shadow-opacity" name="shadow_opacity" min="0" max="100" value="80" step="5"
+                                                   disabled oninput="document.getElementById('shadow-opacity-val').textContent=this.value; updateSubPreview();">
+                                        </div>
+                                        <div>
+                                            <label><span data-i18n="sub.shadow_size">Size</span> <span id="shadow-size-val" style="color:var(--primary);font-weight:700;">3</span>px</label>
+                                            <input type="range" id="sub-shadow-size" name="shadow_size" min="1" max="20" value="3" step="1"
+                                                   disabled oninput="document.getElementById('shadow-size-val').textContent=this.value; updateSubPreview();">
+                                        </div>
+                                    </div>
+                                    <div style="display:grid;grid-template-columns:auto 1fr;gap:0.5rem;align-items:center;margin-top:0.4rem;">
+                                        <input type="color" id="sub-shadow-color" name="shadow_color" value="#000000"
+                                               disabled oninput="updateSubPreview();" onchange="updateSubPreview();"
+                                               style="width:2.8rem;height:2.2rem;padding:2px;border-radius:6px;border:1px solid var(--border);cursor:pointer;">
+                                        <select id="sub-shadow-direction" name="shadow_direction" disabled onchange="updateSubPreview()">
+                                            <option value="bottom_right" data-i18n="sub.shadow_dir.br">↘ Bottom Right</option>
+                                            <option value="bottom" data-i18n="sub.shadow_dir.b">↓ Bottom</option>
+                                            <option value="bottom_left" data-i18n="sub.shadow_dir.bl">↙ Bottom Left</option>
+                                            <option value="right" data-i18n="sub.shadow_dir.r">→ Right</option>
+                                            <option value="left" data-i18n="sub.shadow_dir.l">← Left</option>
+                                            <option value="top_right" data-i18n="sub.shadow_dir.tr">↗ Top Right</option>
+                                            <option value="top" data-i18n="sub.shadow_dir.t">↑ Top</option>
+                                            <option value="top_left" data-i18n="sub.shadow_dir.tl">↖ Top Left</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
 
@@ -607,6 +679,6 @@
 <div id="batch-status" style="display:none;"></div>
 <div id="export-status" style="display:none;"></div>
 
-<script src="/static/js/app.js"></script>
+<script src="/static/js/app.js?v=2"></script>
 </body>
 </html>
