@@ -1867,11 +1867,11 @@ async function pollJobStatus(jobId, statusBoxId) {
                                         : `<div style="font-size:0.68rem;color:var(--text-muted);margin-top:1px;">${isProRes ? 'ProRes — download only' : 'Non-video'}</div>`}
                                 </div>
                                 ${canPreview ? `
-                                <button class="btn btn-ghost btn-sm btn-icon"
-                                        onclick="event.stopPropagation(); window.location='/api/download/${jobId}/${index}'"
-                                        title="Download" style="flex-shrink:0;">
+                                <a href="/api/download/${jobId}/${index}" download
+                                   class="btn btn-ghost btn-sm btn-icon" style="text-decoration:none;flex-shrink:0;"
+                                   onclick="event.stopPropagation();" title="Download">
                                     <i class="ph ph-download-simple"></i>
-                                </button>` : `
+                                </a>` : `
                                 <a href="${fileUrl}" download class="btn btn-ghost btn-sm btn-icon" style="text-decoration:none;flex-shrink:0;">
                                     <i class="ph ph-download-simple"></i>
                                 </a>`}
