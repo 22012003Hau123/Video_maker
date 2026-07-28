@@ -16,8 +16,10 @@ from datetime import datetime
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, Response, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, Response, PlainTextResponse, RedirectResponse
 from fastapi.requests import Request
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
@@ -57,12 +59,40 @@ PREVIEW_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 # (Helps avoid mis-transcriptions like "Remember to attend" for "Belvedere 10")
 WHISPER_PROMPT = "Belvedere 10, Belvedere Vodka, Moët & Chandon, Hennessy, luxury spirit brands."
 
+# Auth config
+APP_PASSWORD    = os.getenv("APP_PASSWORD", "")
+SESSION_SECRET  = os.getenv("SESSION_SECRET_KEY", "change-me-please")
+
 # Initialize FastAPI
 app = FastAPI(
     title="Video Subtitles Automation",
     description="Tự động hoá sản xuất video: phụ đề, nội dung pháp lý, master hoá",
     version="1.0.0"
 )
+
+# ── AUTH MIDDLEWARE ───────────────────────────────────────────
+# SessionMiddleware must be outermost so session is populated before AuthMiddleware runs
+class AuthMiddleware(BaseHTTPMiddleware):
+    _PUBLIC = {"/login", "/logout", "/health"}
+
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        if (path in self._PUBLIC
+                or path.startswith("/static/")
+                or path.startswith("/api/fonts/files/")):
+            return await call_next(request)
+
+        if not request.session.get("authenticated"):
+            if path.startswith("/api/"):
+                return Response(content="Unauthorized", status_code=401,
+                                media_type="text/plain")
+            return RedirectResponse(url="/login", status_code=302)
+
+        return await call_next(request)
+
+app.add_middleware(AuthMiddleware)
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET,
+                   max_age=86400 * 7, https_only=False)
 
 # Static files and templates
 static_dir = Path(__file__).parent / "static"
@@ -2137,8 +2167,28 @@ async def favicon():
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    if request.session.get("authenticated"):
+        return RedirectResponse(url="/", status_code=302)
+    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+
+
+@app.post("/login", response_class=HTMLResponse)
+async def login_submit(request: Request, password: str = Form(...)):
+    if APP_PASSWORD and password == APP_PASSWORD:
+        request.session["authenticated"] = True
+        return RedirectResponse(url="/", status_code=302)
+    return templates.TemplateResponse("login.html", {"request": request, "error": "Incorrect password"})
+
+
+@app.get("/logout")
+async def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/login", status_code=302)
 
 
 @app.get("/api/mastering/gold-manifest")
