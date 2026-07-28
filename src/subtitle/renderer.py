@@ -127,6 +127,7 @@ class SubtitleRenderer:
             opts["bold"]     = bold_flag
             opts["italic"]   = italic_flag
         elif font_family:
+            opts["fontname"] = font_family  # use uploaded font name directly; fontsdir lets libass find it
             fn_lower = font_family.lower()
             if "bold" in fn_lower or "black" in fn_lower:
                 opts["bold"] = 1
