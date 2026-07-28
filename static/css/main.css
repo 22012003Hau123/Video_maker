@@ -127,7 +127,7 @@ html, body {
 /* ── WORKSPACE ───────────────────────────────────────────── */
 .workspace {
     display: flex;
-    height: calc(100vh - var(--navbar-h));
+    height: calc(100vh - var(--navbar-h) - var(--statusbar-h));
     overflow: hidden;
 }
 
